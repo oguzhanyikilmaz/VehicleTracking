@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Araç Takip Sistemi</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            height: 90vh;
+            width: 100%;
+        }
+        .header {
+            background-color: #003366;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .vehicle-info {
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin-top: 10px;
+        }
+        .connection-status {
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            margin-left: 15px;
+        }
+        .connected {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .disconnected {
+            background-color: #f44336;
+            color: white;
+        }
+        .reconnecting {
+            background-color: #FF9800;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Araç Takip Sistemi</h1>
+        <div>
+            <span>SignalR Bağlantısı: </span>
+            <span id="connectionStatus" class="connection-status disconnected">Bağlantı Yok</span>
+        </div>
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.6/signalr.min.js"></script>
+    <script>
+        // Harita başlatma
+        const map = L.map('map').setView([41.0082, 28.9784], 8); // İstanbul merkezi
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Araç işaretçileri
+        const vehicleMarkers = {};
+
+        // SignalR bağlantısı
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/hubs/vehicleLocation")
+            .withAutomaticReconnect([0, 1000, 5000, 10000]) // Yeniden bağlanma stratejisi
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+        // SignalR bağlantı durumu
+        const connectionStatusElement = document.getElementById('connectionStatus');
+
+        connection.onclose(() => {
+            connectionStatusElement.textContent = 'Bağlantı Kesildi';
+            connectionStatusElement.className = 'connection-status disconnected';
+        });
+
+        connection.onreconnecting(() => {
+            connectionStatusElement.textContent = 'Yeniden Bağlanıyor...';
+            connectionStatusElement.className = 'connection-status reconnecting';
+        });
+
+        connection.onreconnected(() => {
+            connectionStatusElement.textContent = 'Bağlı';
+            connectionStatusElement.className = 'connection-status connected';
+            // Yeniden bağlandığında tüm araçlara abone ol
+            connection.invoke("SubscribeToAllVehicleUpdates").catch(err => console.error(err));
+        });
+
+        // Tekil konum güncellemelerini al
+        connection.on("ReceiveLocationUpdate", (vehicle) => {
+            updateVehicleOnMap(vehicle);
+        });
+
+        // Toplu konum güncellemelerini al
+        connection.on("ReceiveBatchLocationUpdate", (vehicles) => {
+            if (Array.isArray(vehicles)) {
+                vehicles.forEach(vehicle => {
+                    updateVehicleOnMap(vehicle);
+                });
+            }
+        });
+
+        // Araç konumlarını haritada güncelle
+        function updateVehicleOnMap(vehicle) {
+            const position = [vehicle.latitude, vehicle.longitude];
+            
+            if (vehicleMarkers[vehicle.id]) {
+                // Mevcut işaretçiyi güncelle
+                vehicleMarkers[vehicle.id].setLatLng(position);
+                
+                // Popup içeriğini güncelle
+                const popup = vehicleMarkers[vehicle.id].getPopup();
+                popup.setContent(createPopupContent(vehicle));
+                
+                // Açıksa popupu yeniden aç
+                if (popup.isOpen()) {
+                    popup.update();
+                }
+            } else {
+                // Yeni işaretçi oluştur
+                const marker = L.marker(position)
+                    .addTo(map)
+                    .bindPopup(createPopupContent(vehicle));
+                
+                vehicleMarkers[vehicle.id] = marker;
+            }
+        }
+
+        // Popup içeriği oluştur
+        function createPopupContent(vehicle) {
+            const date = new Date(vehicle.lastUpdateTime);
+            const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+            
+            return `
+                <div class="vehicle-info">
+                    <h3>${vehicle.plateNumber}</h3>
+                    <p>Konum: ${vehicle.latitude.toFixed(6)}, ${vehicle.longitude.toFixed(6)}</p>
+                    <p>Hız: ${vehicle.speed.toFixed(1)} km/s</p>
+                    <p>Son Güncelleme: ${formattedDate}</p>
+                </div>
+            `;
+        }
+
+        // SignalR bağlantısını başlat
+        async function startConnection() {
+            try {
+                await connection.start();
+                connectionStatusElement.textContent = 'Bağlı';
+                connectionStatusElement.className = 'connection-status connected';
+                
+                // Tüm araç güncellemelerine abone ol
+                await connection.invoke("SubscribeToAllVehicleUpdates");
+                console.log("SignalR Connected");
+            } catch (err) {
+                console.error(err);
+                connectionStatusElement.textContent = 'Bağlantı Hatası';
+                connectionStatusElement.className = 'connection-status disconnected';
+                setTimeout(startConnection, 5000);
+            }
+        }
+
+        // Sayfa yüklendiğinde bağlantıyı başlat
+        startConnection();
+    </script>
+</body>
+</html> 
