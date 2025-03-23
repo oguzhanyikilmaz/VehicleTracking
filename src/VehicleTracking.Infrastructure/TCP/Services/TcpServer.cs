@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Polly;
+using VehicleTracking.API.Services;
 using VehicleTracking.Application.Services;
 using VehicleTracking.Domain.Repositories;
 using VehicleTracking.Infrastructure.Common;
@@ -67,17 +68,17 @@ namespace VehicleTracking.Infrastructure.TCP.Services
             _listener = new TcpListener(IPAddress.Any, port);
             _cancellationTokenSource = new CancellationTokenSource();
             _deviceIdToVehicleIdMap = new Dictionary<string, Guid>();
-            
+
             // Bağlantı havuzu oluştur
             _connectionPool = new TcpConnectionPool(connectionPoolLogger, 200, 20);
-            
+
             // Batch processor'ı oluştur ve konum güncellemelerini toplu şekilde işleyecek callback'i tanımla
             _batchProcessor = new BatchProcessor<TcpLocationData>(
-                batchProcessorLogger, 
-                ProcessLocationBatchAsync, 
+                batchProcessorLogger,
+                ProcessLocationBatchAsync,
                 100,  // maksimum 100 konum bir arada işlenecek
                 1000); // maksimum 1 saniye bekleyecek
-                
+
             // 1 dakikalık aralıklarla bağlantı istatistiklerini logla
             _metricsReportingTimer = new Timer(LogConnectionMetrics, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
         }
@@ -88,16 +89,16 @@ namespace VehicleTracking.Infrastructure.TCP.Services
             {
                 // Veritabanı nesnelerinin var olduğundan emin ol
                 await _bulkUpdateService.EnsureDatabaseObjectsAsync();
-                
+
                 // Aktif araçların device ID'lerini ön belleğe al
                 await InitializeDeviceMap();
-                
+
                 // TCP sunucu görevini başlat
                 _serverTask = StartServerAsync(_cancellationTokenSource.Token);
-                
+
                 _logger.LogInformation("TCP Server started on port {Port} with performance optimizations and monitoring", _port);
             }
-            
+
             return;
         }
 
@@ -113,7 +114,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
 
                 if (_serverTask != null)
                     await _serverTask;
-                
+
                 _logger.LogInformation("TCP Server stopped");
             }
         }
@@ -125,7 +126,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                 try
                 {
                     var vehicles = await _vehicleRepository.GetActiveVehiclesAsync();
-                    
+
                     await _mapLock.WaitAsync();
                     try
                     {
@@ -142,7 +143,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                     {
                         _mapLock.Release();
                     }
-                    
+
                     _logger.LogInformation("Initialized device-to-vehicle map with {Count} entries", _deviceIdToVehicleIdMap.Count);
                 }
                 catch (Exception ex)
@@ -165,7 +166,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                     Interlocked.Increment(ref _totalConnectionsReceived);
                     Interlocked.Increment(ref _activeConnections);
                     _performanceMetrics.IncrementCounter("TCP.ConnectionsAccepted");
-                    
+
                     _ = HandleClientAsync(client, cancellationToken);
                 }
             }
@@ -179,7 +180,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
         {
             // İstemci adresini benzersiz bir anahtar olarak kullan
             string clientKey = client.Client.RemoteEndPoint.ToString();
-            
+
             try
             {
                 using (_performanceMetrics.MeasureOperation("TcpServer.HandleClient"))
@@ -198,7 +199,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                                 while (!cancellationToken.IsCancellationRequested)
                                 {
                                     int bytesRead;
-                                    
+
                                     try
                                     {
                                         bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
@@ -208,7 +209,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                                         _logger.LogWarning(ex, "Error reading from client {ClientKey}, connection might be closed", clientKey);
                                         break;
                                     }
-                                    
+
                                     if (bytesRead == 0) break;
 
                                     data.Append(Encoding.ASCII.GetString(buffer, 0, bytesRead));
@@ -248,7 +249,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                 using (_performanceMetrics.MeasureOperation("TcpServer.ProcessMessage"))
                 {
                     var locationData = await _dataProcessor.ProcessDataAsync(message);
-                    
+
                     // Batch processor'a ekle (toplu işleme kuyruğuna gönder)
                     _batchProcessor.Add(locationData);
                 }
@@ -303,7 +304,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                     {
                         _logger.LogWarning("Found {Count} unknown devices, refreshing device map", unknownDevices.Count);
                         await InitializeDeviceMap();
-                        
+
                         // Yeni map ile tekrar dene
                         await _mapLock.WaitAsync();
                         try
@@ -344,7 +345,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                             _logger.LogInformation("Processed batch of {Count} location updates", bulkUpdates.Count);
                             _performanceMetrics.IncrementCounter("DB.LocationUpdates", bulkUpdates.Count);
                         }
-                        
+
                         // SignalR üzerinden konumları Web istemcilerine gönder
                         if (processedVehicleIds.Count > 0)
                         {
@@ -386,4 +387,4 @@ namespace VehicleTracking.Infrastructure.TCP.Services
             _metricsReportingTimer?.Dispose();
         }
     }
-} 
+}

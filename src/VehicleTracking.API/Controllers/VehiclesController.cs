@@ -80,4 +80,4 @@ namespace VehicleTracking.API.Controllers
         public double Longitude { get; set; }
         public double Speed { get; set; }
     }
-} 
+}
