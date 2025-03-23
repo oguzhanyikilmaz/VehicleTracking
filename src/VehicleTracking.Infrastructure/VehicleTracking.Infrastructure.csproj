@@ -15,7 +15,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\VehicleTracking.API\VehicleTracking.API.csproj" />
     <ProjectReference Include="..\VehicleTracking.Application\VehicleTracking.Application.csproj" />
     <ProjectReference Include="..\VehicleTracking.Domain\VehicleTracking.Domain.csproj" />
   </ItemGroup>

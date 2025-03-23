@@ -27,4 +27,4 @@ namespace VehicleTracking.API.Hubs
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, "AllVehicles");
         }
     }
-} 
+}
