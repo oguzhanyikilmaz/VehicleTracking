@@ -1,11 +1,4 @@
-using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using Microsoft.Graph;
-using System;
 using VehicleTracking.API.Hubs;
 using VehicleTracking.API.Services;
 using VehicleTracking.Application.Mapping;
@@ -124,10 +117,12 @@ app.Run();
 public class TcpServerFactory
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly IConfiguration _configuration;
 
-    public TcpServerFactory(IServiceProvider serviceProvider)
+    public TcpServerFactory(IServiceProvider serviceProvider, IConfiguration configuration)
     {
         _serviceProvider = serviceProvider;
+        _configuration = configuration;
     }
 
     public TcpServer CreateTcpServer()
@@ -143,7 +138,7 @@ public class TcpServerFactory
         var batchProcessorLogger = _serviceProvider.GetRequiredService<ILogger<BatchProcessor<TcpLocationData>>>();
         var connectionPoolLogger = _serviceProvider.GetRequiredService<ILogger<TcpConnectionPool>>();
 
-        var port = 5000; // Burada da appsettings.json'dan alabiliriz
+        var port = _configuration.GetSection("TcpServer").GetValue<int>("Port", 5000);
         
         return new TcpServer(
             logger,

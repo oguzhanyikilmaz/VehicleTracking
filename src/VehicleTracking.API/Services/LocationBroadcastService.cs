@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using VehicleTracking.API.Hubs;
 using VehicleTracking.Application.DTOs;
+using VehicleTracking.Application.Services;
 
 namespace VehicleTracking.API.Services
 {

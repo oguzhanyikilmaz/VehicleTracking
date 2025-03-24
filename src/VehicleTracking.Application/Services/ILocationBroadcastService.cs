@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using VehicleTracking.Application.DTOs;
 
-namespace VehicleTracking.API.Services
+namespace VehicleTracking.Application.Services
 {
     public interface ILocationBroadcastService
     {
