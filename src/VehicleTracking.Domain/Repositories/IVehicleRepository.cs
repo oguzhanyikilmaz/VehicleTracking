@@ -1,19 +1,22 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using MongoDB.Driver.GeoJsonObjectModel;
 using VehicleTracking.Domain.Entities;
 
 namespace VehicleTracking.Domain.Repositories
 {
     public interface IVehicleRepository
     {
-        Task<Vehicle> GetByIdAsync(Guid id);
+        Task<Vehicle> GetByIdAsync(string id);
         Task<IEnumerable<Vehicle>> GetAllAsync();
-        Task<Vehicle> AddAsync(Vehicle vehicle);
-        Task UpdateAsync(Vehicle vehicle);
-        Task DeleteAsync(Guid id);
-        Task UpdateLocationAsync(Guid id, double latitude, double longitude, double speed);
         Task<IEnumerable<Vehicle>> GetActiveVehiclesAsync();
-        Task<IEnumerable<Vehicle>> GetVehiclesByIdsAsync(IEnumerable<Guid> ids);
+        Task<Vehicle> GetVehicleByDeviceIdAsync(string deviceId);
+        Task<IEnumerable<Vehicle>> GetVehiclesByIdsAsync(IEnumerable<string> ids);
+        Task<IEnumerable<Vehicle>> GetVehiclesNearLocationAsync(double latitude, double longitude, double maxDistanceKm);
+        Task<Vehicle> AddAsync(Vehicle vehicle);
+        Task<Vehicle> UpdateAsync(Vehicle vehicle);
+        Task<bool> UpdateLocationAsync(string id, GeoJsonPoint<GeoJson2DGeographicCoordinates> location, double speed);
+        Task<bool> DeleteAsync(string id);
     }
 } 

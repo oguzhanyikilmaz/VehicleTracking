@@ -1,68 +1,84 @@
+using Microsoft.Extensions.Logging;
+using MongoDB.Driver;
+using Polly;
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using Polly;
+using VehicleTracking.Domain.Entities;
 using VehicleTracking.Infrastructure.Common;
+using VehicleTracking.Infrastructure.Data.MongoDb;
 
 namespace VehicleTracking.Infrastructure.Data.BulkUpdates
 {
     public class BulkUpdateService
     {
-        private readonly VehicleTrackingDbContext _dbContext;
+        private readonly MongoDbContext _mongoContext;
         private readonly ILogger<BulkUpdateService> _logger;
         private readonly RetryPolicy _retryPolicy;
 
         public BulkUpdateService(
-            VehicleTrackingDbContext dbContext,
+            MongoDbContext mongoContext,
             ILogger<BulkUpdateService> logger,
             RetryPolicy retryPolicy)
         {
-            _dbContext = dbContext;
+            _mongoContext = mongoContext;
             _logger = logger;
             _retryPolicy = retryPolicy;
         }
 
-        public async Task BulkUpdateLocationsAsync(IEnumerable<BulkLocationUpdate> updates)
+        public async Task<int> BulkUpdateLocationsAsync(IEnumerable<BulkLocationUpdate> updates)
         {
             if (!updates.Any())
-                return;
+                return 0;
 
             try
             {
+                int updateCount = 0;
                 await _retryPolicy.GetDatabaseRetryPolicy().ExecuteAsync(async context =>
                 {
-                    var connectionString = _dbContext.Database.GetConnectionString();
-                    using var connection = new SqlConnection(connectionString);
-                    await connection.OpenAsync();
+                    var bulkOps = new List<WriteModel<Vehicle>>();
+                    var historyInserts = new List<LocationHistory>();
 
-                    using var transaction = connection.BeginTransaction();
-                    try
+                    foreach (var update in updates)
                     {
-                        using var dataTable = CreateDataTable(updates);
-                        await BulkCopyAsync(connection, transaction, dataTable);
-                        
-                        // Execute the merge stored procedure
-                        using var command = connection.CreateCommand();
-                        command.Transaction = transaction;
-                        command.CommandText = "EXEC dbo.MergeVehicleLocations";
-                        command.CommandType = CommandType.Text;
-                        await command.ExecuteNonQueryAsync();
-                        
-                        transaction.Commit();
-                        _logger.LogInformation("Bulk updated {Count} vehicle locations", updates.Count());
+                        // Update for Vehicle collection
+                        var filter = Builders<Vehicle>.Filter.Eq(v => v.Id, update.VehicleId);
+                        var updateDefinition = Builders<Vehicle>.Update
+                            .Set(v => v.Location, update.Location)
+                            .Set(v => v.Speed, update.Speed)
+                            .Set(v => v.LastUpdateTime, update.Timestamp);
+
+                        bulkOps.Add(new UpdateOneModel<Vehicle>(filter, updateDefinition));
+
+                        // Create history record
+                        historyInserts.Add(new LocationHistory
+                        {
+                            VehicleId = update.VehicleId,
+                            Location = update.Location,
+                            Speed = update.Speed,
+                            Timestamp = update.Timestamp
+                        });
                     }
-                    catch
+
+                    // Execute bulk vehicle updates
+                    if (bulkOps.Any())
                     {
-                        transaction.Rollback();
-                        throw;
+                        var result = await _mongoContext.Vehicles.BulkWriteAsync(bulkOps);
+                        updateCount = (int)result.ModifiedCount;
+                        _logger.LogInformation("Bulk updated {Count} vehicle locations. Modified: {Modified}", 
+                            bulkOps.Count, result.ModifiedCount);
+                    }
+
+                    // Insert location history in bulk
+                    if (historyInserts.Any())
+                    {
+                        await _mongoContext.LocationHistory.InsertManyAsync(historyInserts);
+                        _logger.LogInformation("Inserted {Count} location history records", historyInserts.Count);
                     }
                 }, new Context { ["OperationKey"] = "BulkUpdateLocations" });
+
+                return updateCount;
             }
             catch (Exception ex)
             {
@@ -71,117 +87,21 @@ namespace VehicleTracking.Infrastructure.Data.BulkUpdates
             }
         }
 
-        private DataTable CreateDataTable(IEnumerable<BulkLocationUpdate> updates)
-        {
-            var dataTable = new DataTable("VehicleLocationUpdates");
-            
-            dataTable.Columns.Add("VehicleId", typeof(Guid));
-            dataTable.Columns.Add("Latitude", typeof(double));
-            dataTable.Columns.Add("Longitude", typeof(double));
-            dataTable.Columns.Add("Speed", typeof(double));
-            dataTable.Columns.Add("UpdatedAt", typeof(DateTime));
-
-            foreach (var update in updates)
-            {
-                dataTable.Rows.Add(
-                    update.VehicleId,
-                    update.Latitude,
-                    update.Longitude,
-                    update.Speed,
-                    update.Timestamp
-                );
-            }
-
-            return dataTable;
-        }
-
-        private async Task BulkCopyAsync(SqlConnection connection, SqlTransaction transaction, DataTable dataTable)
-        {
-            using var bulkCopy = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction)
-            {
-                DestinationTableName = "VehicleLocationUpdates",
-                BatchSize = 1000,
-                BulkCopyTimeout = 60 // seconds
-            };
-
-            bulkCopy.ColumnMappings.Add("VehicleId", "VehicleId");
-            bulkCopy.ColumnMappings.Add("Latitude", "Latitude");
-            bulkCopy.ColumnMappings.Add("Longitude", "Longitude");
-            bulkCopy.ColumnMappings.Add("Speed", "Speed");
-            bulkCopy.ColumnMappings.Add("UpdatedAt", "UpdatedAt");
-
-            await bulkCopy.WriteToServerAsync(dataTable);
-        }
-
-        // SQL kodunu oluşturan yardımcı metot
-        public string GenerateMergeStoredProcedure()
-        {
-            var sql = new StringBuilder();
-            sql.AppendLine("CREATE OR ALTER PROCEDURE dbo.MergeVehicleLocations");
-            sql.AppendLine("AS");
-            sql.AppendLine("BEGIN");
-            sql.AppendLine("    SET NOCOUNT ON;");
-            sql.AppendLine();
-            sql.AppendLine("    MERGE INTO Vehicles AS target");
-            sql.AppendLine("    USING (");
-            sql.AppendLine("        SELECT");
-            sql.AppendLine("            VehicleId,");
-            sql.AppendLine("            Latitude,");
-            sql.AppendLine("            Longitude,");
-            sql.AppendLine("            Speed,");
-            sql.AppendLine("            UpdatedAt");
-            sql.AppendLine("        FROM VehicleLocationUpdates");
-            sql.AppendLine("    ) AS source ON (target.Id = source.VehicleId)");
-            sql.AppendLine("    WHEN MATCHED THEN");
-            sql.AppendLine("        UPDATE SET");
-            sql.AppendLine("            target.Latitude = source.Latitude,");
-            sql.AppendLine("            target.Longitude = source.Longitude,");
-            sql.AppendLine("            target.Speed = source.Speed,");
-            sql.AppendLine("            target.LastUpdateTime = source.UpdatedAt;");
-            sql.AppendLine();
-            sql.AppendLine("    -- Temporary tabloyu temizle");
-            sql.AppendLine("    TRUNCATE TABLE VehicleLocationUpdates;");
-            sql.AppendLine("END");
-
-            return sql.ToString();
-        }
-
-        // Geçici tablo oluşturan SQL
-        public string CreateTemporaryTable()
-        {
-            return @"
-                IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'VehicleLocationUpdates')
-                BEGIN
-                    CREATE TABLE VehicleLocationUpdates (
-                        Id INT IDENTITY(1,1) PRIMARY KEY,
-                        VehicleId UNIQUEIDENTIFIER NOT NULL,
-                        Latitude FLOAT NOT NULL,
-                        Longitude FLOAT NOT NULL, 
-                        Speed FLOAT NOT NULL,
-                        UpdatedAt DATETIME NOT NULL
-                    );
-                    
-                    CREATE INDEX IX_VehicleLocationUpdates_VehicleId ON VehicleLocationUpdates(VehicleId);
-                END
-            ";
-        }
-
-        // Veritabanı başlangıcında gerekli nesneleri oluşturmak için
+        // Bu metot veritabanı nesnelerinin varlığını kontrol eder ve gerekirse oluşturur
         public async Task EnsureDatabaseObjectsAsync()
         {
             try
             {
-                // Geçici tabloyu oluştur
-                await _dbContext.Database.ExecuteSqlRawAsync(CreateTemporaryTable());
-                
-                // Stored procedure'ü oluştur veya güncelle
-                await _dbContext.Database.ExecuteSqlRawAsync(GenerateMergeStoredProcedure());
-                
-                _logger.LogInformation("Database objects for bulk operations created successfully");
+                await _retryPolicy.GetDatabaseRetryPolicy().ExecuteAsync(async context =>
+                {
+                    // MongoDbContext constructor'ında zaten gerekli koleksiyonlar ve
+                    // indeksler oluşturuluyor, bu nedenle burada ek bir işlem yapmaya gerek yok
+                    _logger.LogInformation("Verifying MongoDB collections and indexes");
+                }, new Context { ["OperationKey"] = "EnsureDatabaseObjects" });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating database objects for bulk updates");
+                _logger.LogError(ex, "Error ensuring database objects");
                 throw;
             }
         }

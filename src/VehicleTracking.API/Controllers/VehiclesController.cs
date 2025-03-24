@@ -26,7 +26,7 @@ namespace VehicleTracking.API.Controllers
         }
 
         [HttpGet("{id}")]
-        public async Task<ActionResult<VehicleDto>> GetVehicle(Guid id)
+        public async Task<ActionResult<VehicleDto>> GetVehicle(string id)
         {
             var vehicle = await _vehicleService.GetVehicleByIdAsync(id);
             if (vehicle == null)
@@ -38,12 +38,12 @@ namespace VehicleTracking.API.Controllers
         [HttpPost]
         public async Task<ActionResult<VehicleDto>> CreateVehicle(VehicleDto vehicleDto)
         {
-            var result = await _vehicleService.CreateVehicleAsync(vehicleDto);
+            var result = await _vehicleService.AddVehicleAsync(vehicleDto);
             return CreatedAtAction(nameof(GetVehicle), new { id = result.Id }, result);
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateVehicle(Guid id, VehicleDto vehicleDto)
+        public async Task<IActionResult> UpdateVehicle(string id, VehicleDto vehicleDto)
         {
             if (id != vehicleDto.Id)
                 return BadRequest();
@@ -53,14 +53,14 @@ namespace VehicleTracking.API.Controllers
         }
 
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteVehicle(Guid id)
+        public async Task<IActionResult> DeleteVehicle(string id)
         {
             await _vehicleService.DeleteVehicleAsync(id);
             return NoContent();
         }
 
         [HttpPut("{id}/location")]
-        public async Task<IActionResult> UpdateLocation(Guid id, [FromBody] LocationUpdateDto location)
+        public async Task<IActionResult> UpdateLocation(string id, [FromBody] LocationUpdateDto location)
         {
             await _vehicleService.UpdateVehicleLocationAsync(id, location.Latitude, location.Longitude, location.Speed);
             return NoContent();

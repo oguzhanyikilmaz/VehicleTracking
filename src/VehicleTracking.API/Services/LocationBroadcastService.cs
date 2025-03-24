@@ -37,7 +37,7 @@ namespace VehicleTracking.API.Services
                 };
 
                 // İlgili araca abone olan istemcilere güncelleme gönder
-                await _hubContext.Clients.Group(vehicle.Id.ToString())
+                await _hubContext.Clients.Group(vehicle.Id)
                     .SendAsync("ReceiveLocationUpdate", locationUpdate);
 
                 // Tüm araç güncellemelerine abone olan istemcilere güncelleme gönder
@@ -70,7 +70,7 @@ namespace VehicleTracking.API.Services
                     });
 
                     // İlgili araca abone olan istemcilere güncelleme gönder
-                    await _hubContext.Clients.Group(vehicle.Id.ToString())
+                    await _hubContext.Clients.Group(vehicle.Id)
                         .SendAsync("ReceiveLocationUpdate", locationUpdates[locationUpdates.Count - 1]);
                 }
 

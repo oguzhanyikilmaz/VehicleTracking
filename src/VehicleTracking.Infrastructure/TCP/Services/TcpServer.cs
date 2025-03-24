@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using MongoDB.Driver.GeoJsonObjectModel;
 using Polly;
 using VehicleTracking.Application.Services;
 using VehicleTracking.Domain.Repositories;
@@ -35,7 +36,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
         private readonly ILocationBroadcastService _locationBroadcastService;
         private Task _serverTask;
         private readonly int _port;
-        private readonly Dictionary<string, Guid> _deviceIdToVehicleIdMap;
+        private readonly Dictionary<string, string> _deviceIdToVehicleIdMap;
         private readonly SemaphoreSlim _mapLock = new SemaphoreSlim(1, 1);
         private int _totalConnectionsReceived = 0;
         private int _activeConnections = 0;
@@ -66,18 +67,18 @@ namespace VehicleTracking.Infrastructure.TCP.Services
             _port = port;
             _listener = new TcpListener(IPAddress.Any, port);
             _cancellationTokenSource = new CancellationTokenSource();
-            _deviceIdToVehicleIdMap = new Dictionary<string, Guid>();
-            
+            _deviceIdToVehicleIdMap = new Dictionary<string, string>();
+
             // Bağlantı havuzu oluştur
             _connectionPool = new TcpConnectionPool(connectionPoolLogger, 200, 20);
-            
+
             // Batch processor'ı oluştur ve konum güncellemelerini toplu şekilde işleyecek callback'i tanımla
             _batchProcessor = new BatchProcessor<TcpLocationData>(
-                batchProcessorLogger, 
-                ProcessLocationBatchAsync, 
+                batchProcessorLogger,
+                ProcessLocationBatchAsync,
                 100,  // maksimum 100 konum bir arada işlenecek
                 1000); // maksimum 1 saniye bekleyecek
-                
+
             // 1 dakikalık aralıklarla bağlantı istatistiklerini logla
             _metricsReportingTimer = new Timer(LogConnectionMetrics, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
         }
@@ -88,16 +89,16 @@ namespace VehicleTracking.Infrastructure.TCP.Services
             {
                 // Veritabanı nesnelerinin var olduğundan emin ol
                 await _bulkUpdateService.EnsureDatabaseObjectsAsync();
-                
+
                 // Aktif araçların device ID'lerini ön belleğe al
                 await InitializeDeviceMap();
-                
+
                 // TCP sunucu görevini başlat
                 _serverTask = StartServerAsync(_cancellationTokenSource.Token);
-                
+
                 _logger.LogInformation("TCP Server started on port {Port} with performance optimizations and monitoring", _port);
             }
-            
+
             return;
         }
 
@@ -113,7 +114,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
 
                 if (_serverTask != null)
                     await _serverTask;
-                
+
                 _logger.LogInformation("TCP Server stopped");
             }
         }
@@ -125,7 +126,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                 try
                 {
                     var vehicles = await _vehicleRepository.GetActiveVehiclesAsync();
-                    
+
                     await _mapLock.WaitAsync();
                     try
                     {
@@ -142,7 +143,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                     {
                         _mapLock.Release();
                     }
-                    
+
                     _logger.LogInformation("Initialized device-to-vehicle map with {Count} entries", _deviceIdToVehicleIdMap.Count);
                 }
                 catch (Exception ex)
@@ -165,7 +166,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                     Interlocked.Increment(ref _totalConnectionsReceived);
                     Interlocked.Increment(ref _activeConnections);
                     _performanceMetrics.IncrementCounter("TCP.ConnectionsAccepted");
-                    
+
                     _ = HandleClientAsync(client, cancellationToken);
                 }
             }
@@ -179,7 +180,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
         {
             // İstemci adresini benzersiz bir anahtar olarak kullan
             string clientKey = client.Client.RemoteEndPoint.ToString();
-            
+
             try
             {
                 using (_performanceMetrics.MeasureOperation("TcpServer.HandleClient"))
@@ -198,7 +199,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                                 while (!cancellationToken.IsCancellationRequested)
                                 {
                                     int bytesRead;
-                                    
+
                                     try
                                     {
                                         bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
@@ -208,7 +209,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                                         _logger.LogWarning(ex, "Error reading from client {ClientKey}, connection might be closed", clientKey);
                                         break;
                                     }
-                                    
+
                                     if (bytesRead == 0) break;
 
                                     data.Append(Encoding.ASCII.GetString(buffer, 0, bytesRead));
@@ -248,7 +249,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                 using (_performanceMetrics.MeasureOperation("TcpServer.ProcessMessage"))
                 {
                     var locationData = await _dataProcessor.ProcessDataAsync(message);
-                    
+
                     // Batch processor'a ekle (toplu işleme kuyruğuna gönder)
                     _batchProcessor.Add(locationData);
                 }
@@ -268,20 +269,21 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                     // DeviceId'lere göre Guid bilgilerini ön bellekten hızlıca al
                     var bulkUpdates = new List<BulkLocationUpdate>();
                     var unknownDevices = new HashSet<string>();
-                    var processedVehicleIds = new List<Guid>();
+                    var processedVehicleIds = new List<string>();
 
                     await _mapLock.WaitAsync();
                     try
                     {
                         foreach (var update in locationUpdates)
                         {
-                            if (_deviceIdToVehicleIdMap.TryGetValue(update.DeviceId, out var vehicleId))
+                            string vehicleId = await GetVehicleIdFromDeviceIdAsync(update.DeviceId);
+                            if (vehicleId != null)
                             {
                                 bulkUpdates.Add(new BulkLocationUpdate
                                 {
                                     VehicleId = vehicleId,
-                                    Latitude = update.Latitude,
-                                    Longitude = update.Longitude,
+                                    Location = new GeoJsonPoint<GeoJson2DGeographicCoordinates>(
+                                        new GeoJson2DGeographicCoordinates(update.Longitude, update.Latitude)),
                                     Speed = update.Speed,
                                     Timestamp = DateTime.UtcNow
                                 });
@@ -303,21 +305,22 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                     {
                         _logger.LogWarning("Found {Count} unknown devices, refreshing device map", unknownDevices.Count);
                         await InitializeDeviceMap();
-                        
+
                         // Yeni map ile tekrar dene
                         await _mapLock.WaitAsync();
                         try
                         {
                             foreach (var deviceId in unknownDevices)
                             {
-                                if (_deviceIdToVehicleIdMap.TryGetValue(deviceId, out var vehicleId))
+                                string vehicleId = await GetVehicleIdFromDeviceIdAsync(deviceId);
+                                if (vehicleId != null)
                                 {
                                     var update = locationUpdates.First(u => u.DeviceId == deviceId);
                                     bulkUpdates.Add(new BulkLocationUpdate
                                     {
                                         VehicleId = vehicleId,
-                                        Latitude = update.Latitude,
-                                        Longitude = update.Longitude,
+                                        Location = new GeoJsonPoint<GeoJson2DGeographicCoordinates>(
+                                            new GeoJson2DGeographicCoordinates(update.Longitude, update.Latitude)),
                                         Speed = update.Speed,
                                         Timestamp = DateTime.UtcNow
                                     });
@@ -340,11 +343,11 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                     {
                         using (_performanceMetrics.MeasureOperation("TcpServer.BulkUpdateLocations"))
                         {
-                            await _bulkUpdateService.BulkUpdateLocationsAsync(bulkUpdates);
+                            int updateCount = await _bulkUpdateService.BulkUpdateLocationsAsync(bulkUpdates);
                             _logger.LogInformation("Processed batch of {Count} location updates", bulkUpdates.Count);
                             _performanceMetrics.IncrementCounter("DB.LocationUpdates", bulkUpdates.Count);
                         }
-                        
+
                         // SignalR üzerinden konumları Web istemcilerine gönder
                         if (processedVehicleIds.Count > 0)
                         {
@@ -364,6 +367,53 @@ namespace VehicleTracking.Infrastructure.TCP.Services
             }
         }
 
+        private async Task<string> GetVehicleIdFromDeviceIdAsync(string deviceId)
+        {
+            using (_performanceMetrics.MeasureOperation("TcpServer.GetVehicleIdFromDeviceIdAsync"))
+            {
+                // İlk olarak ön bellekten kontrol et
+                string vehicleId = null;
+
+                await _mapLock.WaitAsync();
+                try
+                {
+                    _deviceIdToVehicleIdMap.TryGetValue(deviceId, out vehicleId);
+                }
+                finally
+                {
+                    _mapLock.Release();
+                }
+
+                // Eğer bulunamazsa, veritabanından bul ve ön belleğe ekle
+                if (vehicleId == null)
+                {
+                    try
+                    {
+                        var vehicle = await _vehicleRepository.GetVehicleByDeviceIdAsync(deviceId);
+                        if (vehicle != null)
+                        {
+                            await _mapLock.WaitAsync();
+                            try
+                            {
+                                _deviceIdToVehicleIdMap[deviceId] = vehicle.Id;
+                                vehicleId = vehicle.Id;
+                            }
+                            finally
+                            {
+                                _mapLock.Release();
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error retrieving vehicle for device ID: {DeviceId}", deviceId);
+                    }
+                }
+
+                return vehicleId;
+            }
+        }
+
         private void LogConnectionMetrics(object state)
         {
             try
@@ -375,6 +425,38 @@ namespace VehicleTracking.Infrastructure.TCP.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error logging connection metrics");
+            }
+        }
+
+        private async Task ProcessLocationDataAsync(TcpLocationData locationData)
+        {
+            using (_performanceMetrics.MeasureOperation("TcpServer.ProcessLocationDataAsync"))
+            {
+                try
+                {
+                    string vehicleId = await GetVehicleIdFromDeviceIdAsync(locationData.DeviceId);
+                    
+                    if (vehicleId != null)
+                    {
+                        // Araç konumunu güncelle
+                        await _vehicleService.UpdateVehicleLocationAsync(
+                            vehicleId,
+                            locationData.Latitude,
+                            locationData.Longitude,
+                            locationData.Speed);
+                            
+                        _logger.LogDebug("Updated location for vehicle {VehicleId} from device {DeviceId}",
+                            vehicleId, locationData.DeviceId);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("No vehicle found for device ID: {DeviceId}", locationData.DeviceId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing location data for device {DeviceId}", locationData.DeviceId);
+                }
             }
         }
 
