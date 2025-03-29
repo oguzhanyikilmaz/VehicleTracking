@@ -4,16 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Araç Takip Sistemi</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body {
             margin: 0;
             padding: 0;
             font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
         }
         #map {
-            height: 90vh;
-            width: 100%;
+            flex: 1;
+            height: 100%;
         }
         .header {
             background-color: #003366;
@@ -22,6 +31,77 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            z-index: 1000;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        .sidebar {
+            width: 300px;
+            background-color: #f8f9fa;
+            padding: 15px;
+            overflow-y: auto;
+            border-right: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .sidebar-header h2 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+        .vehicle-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .vehicle-card {
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 4px solid #ccc;
+        }
+        .vehicle-card:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        .vehicle-card.active {
+            border-left-color: #003366;
+            background-color: #f0f4f8;
+        }
+        .vehicle-card h3 {
+            margin: 0 0 5px 0;
+            font-size: 1rem;
+        }
+        .vehicle-card p {
+            margin: 5px 0;
+            font-size: 0.85rem;
+            color: #666;
+        }
+        .speed-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .speed-low {
+            background-color: #4CAF50;  /* Yeşil */
+        }
+        .speed-medium {
+            background-color: #FF9800;  /* Turuncu */
+        }
+        .speed-high {
+            background-color: #f44336;  /* Kırmızı */
         }
         .vehicle-info {
             padding: 10px;
@@ -48,6 +128,19 @@
             background-color: #FF9800;
             color: white;
         }
+        .vehicle-marker {
+            width: 36px;
+            height: 36px;
+            background-color: #003366;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            border: 2px solid white;
+            box-shadow: 0 0 8px rgba(0,0,0,0.3);
+        }
     </style>
 </head>
 <body>
@@ -58,9 +151,21 @@
             <span id="connectionStatus" class="connection-status disconnected">Bağlantı Yok</span>
         </div>
     </div>
-    <div id="map"></div>
+    
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>Aktif Araçlar</h2>
+                <span id="vehicleCount">0</span>
+            </div>
+            <div id="vehicleList" class="vehicle-list">
+                <!-- Araç listesi buraya eklenecek -->
+            </div>
+        </div>
+        <div id="map"></div>
+    </div>
 
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.6/signalr.min.js"></script>
     <script>
         // Harita başlatma
@@ -72,6 +177,10 @@
 
         // Araç işaretçileri
         const vehicleMarkers = {};
+        const vehicles = {};
+        const vehicleList = document.getElementById('vehicleList');
+        const vehicleCountElement = document.getElementById('vehicleCount');
+        let selectedVehicleId = null;
 
         // SignalR bağlantısı
         const connection = new signalR.HubConnectionBuilder()
@@ -98,29 +207,68 @@
             connectionStatusElement.className = 'connection-status connected';
             // Yeniden bağlandığında tüm araçlara abone ol
             connection.invoke("SubscribeToAllVehicleUpdates").catch(err => console.error(err));
+            // Aktif araçları yeniden getir
+            fetchActiveVehicles();
         });
 
         // Tekil konum güncellemelerini al
         connection.on("ReceiveLocationUpdate", (vehicle) => {
             updateVehicleOnMap(vehicle);
+            updateVehicleList(vehicle);
         });
 
         // Toplu konum güncellemelerini al
-        connection.on("ReceiveBatchLocationUpdate", (vehicles) => {
-            if (Array.isArray(vehicles)) {
-                vehicles.forEach(vehicle => {
+        connection.on("ReceiveBatchLocationUpdate", (vehicleUpdates) => {
+            if (Array.isArray(vehicleUpdates)) {
+                vehicleUpdates.forEach(vehicle => {
                     updateVehicleOnMap(vehicle);
+                    updateVehicleList(vehicle);
                 });
             }
         });
+
+        // Özel araç ikonu oluştur
+        function createVehicleIcon(plateNumber, speed) {
+            const speedClass = getSpeedClass(speed);
+            
+            return L.divIcon({
+                className: '',
+                html: `<div class="vehicle-marker" style="background-color: ${getSpeedColor(speed)}">${plateNumber.substring(0, 3)}</div>`,
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
+            });
+        }
+
+        // Hıza göre renk belirle
+        function getSpeedColor(speed) {
+            if (speed < 30) return '#4CAF50'; // Yeşil
+            if (speed < 80) return '#FF9800'; // Turuncu
+            return '#f44336'; // Kırmızı
+        }
+
+        // Hıza göre sınıf belirle
+        function getSpeedClass(speed) {
+            if (speed < 30) return 'speed-low';
+            if (speed < 80) return 'speed-medium';
+            return 'speed-high';
+        }
 
         // Araç konumlarını haritada güncelle
         function updateVehicleOnMap(vehicle) {
             const position = [vehicle.latitude, vehicle.longitude];
             
+            // Araç bilgilerini saklayan nesneyi güncelle
+            vehicles[vehicle.id] = {
+                ...vehicle,
+                position: position
+            };
+            
             if (vehicleMarkers[vehicle.id]) {
                 // Mevcut işaretçiyi güncelle
                 vehicleMarkers[vehicle.id].setLatLng(position);
+                
+                // İkonu güncelle (hıza göre renk değişir)
+                vehicleMarkers[vehicle.id].setIcon(createVehicleIcon(vehicle.plateNumber, vehicle.speed));
                 
                 // Popup içeriğini güncelle
                 const popup = vehicleMarkers[vehicle.id].getPopup();
@@ -132,12 +280,90 @@
                 }
             } else {
                 // Yeni işaretçi oluştur
-                const marker = L.marker(position)
-                    .addTo(map)
-                    .bindPopup(createPopupContent(vehicle));
+                const marker = L.marker(position, {
+                    icon: createVehicleIcon(vehicle.plateNumber, vehicle.speed)
+                })
+                .addTo(map)
+                .bindPopup(createPopupContent(vehicle));
+                
+                // Tıklandığında aracı seç
+                marker.on('click', () => {
+                    selectVehicle(vehicle.id);
+                });
                 
                 vehicleMarkers[vehicle.id] = marker;
             }
+            
+            // Araç sayısını güncelle
+            updateVehicleCount();
+        }
+
+        // Araç listesini güncelle
+        function updateVehicleList(vehicle) {
+            const vehicleCardId = `vehicle-card-${vehicle.id}`;
+            let vehicleCard = document.getElementById(vehicleCardId);
+            
+            if (vehicleCard) {
+                // Mevcut kartı güncelle
+                vehicleCard.innerHTML = createVehicleCardContent(vehicle);
+            } else {
+                // Yeni kart oluştur
+                vehicleCard = document.createElement('div');
+                vehicleCard.id = vehicleCardId;
+                vehicleCard.className = 'vehicle-card';
+                vehicleCard.innerHTML = createVehicleCardContent(vehicle);
+                vehicleCard.onclick = () => selectVehicle(vehicle.id);
+                vehicleList.appendChild(vehicleCard);
+            }
+            
+            // Seçili araç kontrolü
+            if (vehicle.id === selectedVehicleId) {
+                vehicleCard.classList.add('active');
+            } else {
+                vehicleCard.classList.remove('active');
+            }
+        }
+
+        // Araç seçme işlemi
+        function selectVehicle(vehicleId) {
+            // Önceki seçimi temizle
+            if (selectedVehicleId && document.getElementById(`vehicle-card-${selectedVehicleId}`)) {
+                document.getElementById(`vehicle-card-${selectedVehicleId}`).classList.remove('active');
+            }
+            
+            // Yeni seçimi yap
+            selectedVehicleId = vehicleId;
+            
+            if (document.getElementById(`vehicle-card-${vehicleId}`)) {
+                document.getElementById(`vehicle-card-${vehicleId}`).classList.add('active');
+            }
+            
+            // Haritada aracı merkeze al
+            if (vehicleMarkers[vehicleId]) {
+                map.setView(vehicleMarkers[vehicleId].getLatLng(), 14);
+                vehicleMarkers[vehicleId].openPopup();
+            }
+        }
+
+        // Araç sayısını güncelle
+        function updateVehicleCount() {
+            const count = Object.keys(vehicles).length;
+            vehicleCountElement.textContent = count + ' araç';
+        }
+
+        // Araç kartı içeriği oluştur
+        function createVehicleCardContent(vehicle) {
+            const date = new Date(vehicle.lastUpdateTime);
+            const formattedTime = date.toLocaleTimeString();
+            
+            return `
+                <h3>
+                    <span class="speed-indicator ${getSpeedClass(vehicle.speed)}"></span>
+                    ${vehicle.plateNumber}
+                </h3>
+                <p>Hız: ${vehicle.speed.toFixed(1)} km/s</p>
+                <p>Son Güncelleme: ${formattedTime}</p>
+            `;
         }
 
         // Popup içeriği oluştur
@@ -148,11 +374,45 @@
             return `
                 <div class="vehicle-info">
                     <h3>${vehicle.plateNumber}</h3>
-                    <p>Konum: ${vehicle.latitude.toFixed(6)}, ${vehicle.longitude.toFixed(6)}</p>
-                    <p>Hız: ${vehicle.speed.toFixed(1)} km/s</p>
-                    <p>Son Güncelleme: ${formattedDate}</p>
+                    <p><strong>Marka/Model:</strong> ${vehicle.brand || '-'} ${vehicle.model || '-'} ${vehicle.year || ''}</p>
+                    <p><strong>Konum:</strong> ${vehicle.latitude.toFixed(6)}, ${vehicle.longitude.toFixed(6)}</p>
+                    <p><strong>Hız:</strong> ${vehicle.speed.toFixed(1)} km/s</p>
+                    <p><strong>Son Güncelleme:</strong> ${formattedDate}</p>
+                    <p><strong>Cihaz ID:</strong> ${vehicle.deviceId || '-'}</p>
                 </div>
             `;
+        }
+
+        // Aktif araçları getir
+        async function fetchActiveVehicles() {
+            try {
+                const response = await fetch('/api/vehicles/active');
+                if (response.ok) {
+                    const activeVehicles = await response.json();
+                    
+                    // Araç listesini temizle
+                    vehicleList.innerHTML = '';
+                    
+                    // Haritada göster
+                    activeVehicles.forEach(vehicle => {
+                        updateVehicleOnMap(vehicle);
+                        updateVehicleList(vehicle);
+                    });
+                    
+                    // Haritayı tüm araçları görecek şekilde ayarla
+                    if (activeVehicles.length > 0) {
+                        const bounds = [];
+                        activeVehicles.forEach(vehicle => {
+                            bounds.push([vehicle.latitude, vehicle.longitude]);
+                        });
+                        map.fitBounds(L.latLngBounds(bounds), { padding: [50, 50] });
+                    }
+                } else {
+                    console.error('Aktif araçları getirme hatası:', response.status);
+                }
+            } catch (error) {
+                console.error('Aktif araçları getirme hatası:', error);
+            }
         }
 
         // SignalR bağlantısını başlat
@@ -165,6 +425,9 @@
                 // Tüm araç güncellemelerine abone ol
                 await connection.invoke("SubscribeToAllVehicleUpdates");
                 console.log("SignalR Connected");
+                
+                // Aktif araçları getir
+                fetchActiveVehicles();
             } catch (err) {
                 console.error(err);
                 connectionStatusElement.textContent = 'Bağlantı Hatası';

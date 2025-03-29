@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb_vehicletracking
+    ports:
+      - "27018:27017"  # Standart MongoDB portundan farklı olarak 27018 kullanıyoruz
+    volumes:
+      - mongodb_vehicletracking_data:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=vehicleTrackingAdmin
+      - MONGO_INITDB_ROOT_PASSWORD=vhcTracking123!.
+    restart: unless-stopped
+    networks:
+      - vehicle_tracking_network
+
+  vehicletracking_api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vehicletracking_api
+    ports:
+      - "7001:7001"   # TCP Server portu (iç ve dış port aynı)
+      - "8001:80"     # HTTP port (Nginx tarafından yönlendirilecek)
+    depends_on:
+      - mongodb
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - MongoDbSettings__ConnectionString=mongodb://vehicleTrackingAdmin:vhcTracking123!.@mongodb_vehicletracking:27017
+      - MongoDbSettings__DatabaseName=VehicleTracking
+      - TcpServer__Port=7001
+    networks:
+      - vehicle_tracking_network
+      #- nginx_proxy_network  # Nginx Proxy Manager ağına bağlanmak için
+    restart: unless-stopped
+    labels:
+      - "com.docker.compose.project=vehicletracking"
+
+volumes:
+  mongodb_vehicletracking_data:
+    name: mongodb_vehicletracking_data
+
+networks:
+  vehicle_tracking_network:
+    name: vehicle_tracking_network
+  # nginx_proxy_network:
+  #   name: nginx_proxy_network
+  #   external: true  # Varolan Nginx Proxy Manager ağına bağlanmak için 

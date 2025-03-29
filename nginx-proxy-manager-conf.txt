@@ -1,0 +1,43 @@
+# Nginx Proxy Manager - VehicleTracking için Örnek Yapılandırma
+# Bu içeriği Nginx Proxy Manager arayüzünden ekleyebilirsiniz
+
+# =========================================================
+# 1. Domaininiz için Proxy Host ekleyin (Web Arayüzü)
+# =========================================================
+Proxy Host Ayarları:
+- Domain: arac.example.com
+- Scheme: http
+- Forward Hostname / IP: vehicletracking_api
+- Forward Port: 80
+- Websockets desteğini aktifleştirin (Enable websockets support)
+- Cache ayarını devre dışı bırakın veya düşük tutun
+
+# SSL Ayarları:
+- SSL Sertifikası: Let's Encrypt (önerilen)
+- Force SSL: Açık
+- HTTP/2 Support: Açık
+- HSTS: Açık
+
+# Custom Locations (özel yollar):
+Ekstra yapılandırma gerekmez.
+
+# =========================================================
+# 2. TCP Server için Stream ekleyin (Opsiyonel)
+# =========================================================
+# Eğer doğrudan TCP portuna dışarıdan erişim gerekiyorsa:
+
+Stream Ayarları:
+- Forward Hostname / IP: vehicletracking_api
+- Forward Port: 7001
+- Dinlenecek Port: 7001 (veya dışarıya açmak istediğiniz başka bir port)
+
+# =========================================================
+# Notlar:
+# =========================================================
+# 1. Nginx Proxy Manager'ın Docker ağına bağlanabilmesi için
+#    docker-compose.yml dosyasında "nginx_proxy_network" external ağı tanımlanmıştır.
+#
+# 2. Nginx Proxy Manager tarafında bu ağı kullandığınızdan emin olun.
+#
+# 3. vehicletracking_api, Nginx Proxy Manager ve VehicleTracking uygulaması
+#    aynı Docker ağında olmalı ki Nginx, container ismini çözümleyebilsin. 
