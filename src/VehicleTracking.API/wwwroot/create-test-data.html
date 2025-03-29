@@ -103,10 +103,31 @@
         .delete-btn:hover {
             background-color: #d32f2f;
         }
+        .connection-status {
+            display: inline-block;
+            padding: 5px 8px;
+            border-radius: 3px;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        .connected {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .disconnected {
+            background-color: #f44336;
+            color: white;
+        }
+        .reconnecting {
+            background-color: #FF9800;
+            color: white;
+        }
     </style>
 </head>
 <body>
     <h1>Test Araçları Oluştur</h1>
+    
+    <div class="connection-status disconnected" id="connectionStatus">SignalR: Bağlantı Yok</div>
     
     <div class="tabs">
         <div class="tab active" data-tab="create">Araç Oluştur</div>
@@ -190,7 +211,104 @@
         <div class="result" id="simulateResult"></div>
     </div>
     
+    <!-- SignalR Script -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.6/signalr.min.js"></script>
     <script>
+        // SignalR bağlantısı
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/hubs/vehicleLocation")
+            .withAutomaticReconnect([0, 1000, 5000, 10000]) // Yeniden bağlanma stratejisi
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+        // SignalR bağlantı durumu
+        const connectionStatusElement = document.getElementById('connectionStatus');
+
+        connection.onclose(() => {
+            connectionStatusElement.textContent = 'SignalR: Bağlantı Kesildi';
+            connectionStatusElement.className = 'connection-status disconnected';
+        });
+
+        connection.onreconnecting(() => {
+            connectionStatusElement.textContent = 'SignalR: Yeniden Bağlanıyor...';
+            connectionStatusElement.className = 'connection-status reconnecting';
+        });
+
+        connection.onreconnected(() => {
+            connectionStatusElement.textContent = 'SignalR: Bağlı';
+            connectionStatusElement.className = 'connection-status connected';
+            // Yeniden bağlandığında tüm araçlara abone ol
+            connection.invoke("SubscribeToAllVehicleUpdates").catch(err => console.error(err));
+        });
+
+        // Tekil konum güncellemelerini al
+        connection.on("ReceiveLocationUpdate", (vehicle) => {
+            console.log("Konum güncellemesi alındı:", vehicle);
+            // Araç listesini güncelle
+            updateVehicleInList(vehicle);
+        });
+
+        // Toplu konum güncellemelerini al
+        connection.on("ReceiveBatchLocationUpdate", (vehicleUpdates) => {
+            console.log("Toplu konum güncellemesi alındı:", vehicleUpdates);
+            if (Array.isArray(vehicleUpdates)) {
+                vehicleUpdates.forEach(vehicle => {
+                    updateVehicleInList(vehicle);
+                });
+            }
+        });
+
+        // SignalR bağlantısını başlat
+        async function startSignalRConnection() {
+            try {
+                await connection.start();
+                connectionStatusElement.textContent = 'SignalR: Bağlı';
+                connectionStatusElement.className = 'connection-status connected';
+                
+                // Tüm araç güncellemelerine abone ol
+                await connection.invoke("SubscribeToAllVehicleUpdates");
+                console.log("SignalR bağlantısı kuruldu");
+            } catch (err) {
+                console.error("SignalR bağlantı hatası:", err);
+                connectionStatusElement.textContent = 'SignalR: Bağlantı Hatası';
+                connectionStatusElement.className = 'connection-status disconnected';
+                setTimeout(startSignalRConnection, 5000);
+            }
+        }
+
+        // Araç listesinde tekil aracı güncelle
+        function updateVehicleInList(vehicle) {
+            // View sekmesindeki listeyi güncelle
+            const vehiclesList = document.getElementById('vehiclesList');
+            if (!vehiclesList.innerHTML) return; // Henüz liste yüklenmemişse atla
+            
+            const vehicleCardId = `vehicle-card-${vehicle.id}`;
+            let vehicleCard = document.getElementById(vehicleCardId);
+            
+            if (vehicleCard) {
+                // Tarihi formatlama
+                const lastUpdate = new Date(vehicle.lastUpdateTime).toLocaleString();
+                
+                // Mevcut kartın konum bilgilerini güncelle
+                const locationElement = vehicleCard.querySelector('[data-location]');
+                if (locationElement) {
+                    locationElement.textContent = `${vehicle.latitude.toFixed(6)}, ${vehicle.longitude.toFixed(6)}`;
+                }
+                
+                // Hız bilgisini güncelle
+                const speedElement = vehicleCard.querySelector('[data-speed]');
+                if (speedElement) {
+                    speedElement.textContent = `${vehicle.speed.toFixed(1)} km/s`;
+                }
+                
+                // Son güncelleme zamanını güncelle
+                const lastUpdateElement = vehicleCard.querySelector('[data-last-update]');
+                if (lastUpdateElement) {
+                    lastUpdateElement.textContent = lastUpdate;
+                }
+            }
+        }
+
         // Tab işlemleri
         document.querySelectorAll('.tab').forEach(tab => {
             tab.addEventListener('click', () => {
@@ -239,6 +357,9 @@
                 document.getElementById('year').value = '';
                 document.getElementById('deviceId').value = '';
                 
+                // Araç listesini güncelle
+                loadVehicles();
+                
             } catch (error) {
                 document.getElementById('createResult').innerHTML = `
                     <h3>Hata!</h3>
@@ -262,13 +383,13 @@
                         const lastUpdate = new Date(vehicle.lastUpdateTime).toLocaleString();
                         
                         html += `
-                            <div class="vehicle-card">
+                            <div class="vehicle-card" id="vehicle-card-${vehicle.id}">
                                 <h3>${vehicle.plateNumber}</h3>
                                 <p><strong>ID:</strong> ${vehicle.id}</p>
                                 <p><strong>Marka/Model:</strong> ${vehicle.brand || '-'} ${vehicle.model || '-'} ${vehicle.year || ''}</p>
-                                <p><strong>Konum:</strong> ${vehicle.latitude.toFixed(6)}, ${vehicle.longitude.toFixed(6)}</p>
-                                <p><strong>Hız:</strong> ${vehicle.speed.toFixed(1)} km/s</p>
-                                <p><strong>Son Güncelleme:</strong> ${lastUpdate}</p>
+                                <p><strong>Konum:</strong> <span data-location>${vehicle.latitude.toFixed(6)}, ${vehicle.longitude.toFixed(6)}</span></p>
+                                <p><strong>Hız:</strong> <span data-speed>${vehicle.speed.toFixed(1)} km/s</span></p>
+                                <p><strong>Son Güncelleme:</strong> <span data-last-update>${lastUpdate}</span></p>
                                 <p><strong>Durum:</strong> ${vehicle.isActive ? 'Aktif' : 'Pasif'}</p>
                                 
                                 <div class="btn-group">
@@ -297,19 +418,33 @@
                 const lng = parseFloat(document.getElementById('centerLng').value) + (Math.random() - 0.5) * 0.02;
                 const speed = Math.floor(Math.random() * 80);
                 
-                const response = await fetch(`/api/vehicles/${vehicleId}/location?latitude=${lat}&longitude=${lng}&speed=${speed}`, {
-                    method: 'PATCH'
+                // Konum verisini JSON olarak göndereceğiz
+                const locationData = {
+                    latitude: lat,
+                    longitude: lng,
+                    speed: speed
+                };
+                
+                const response = await fetch(`/api/vehicles/${vehicleId}/location`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(locationData)
                 });
                 
                 if (response.ok) {
-                    alert('Konum başarıyla güncellendi!');
-                    loadVehicles();
+                    console.log(`${vehicleId} ID'li aracın konumu güncellendi`);
+                    // Artık sayfa yenilenmeyecek, güncelleme SignalR üzerinden gelecek
                 } else {
-                    alert('Konum güncellenirken bir hata oluştu!');
+                    alert(`Konum güncellenirken bir hata oluştu! Status: ${response.status}`);
+                    console.error('Response:', await response.text());
                 }
                 
             } catch (error) {
                 alert('Hata: ' + error.message);
+                console.error('Error:', error);
             }
         }
         
@@ -392,6 +527,9 @@
             }
             
             document.getElementById('simulateResult').innerHTML = html;
+            
+            // Araç listesini güncelle
+            loadVehicles();
         }
         
         // Araç hareketini simüle et
@@ -419,18 +557,32 @@
                     const speed = Math.floor(Math.random() * 80);
                     
                     try {
-                        const updateResponse = await fetch(`/api/vehicles/${vehicle.id}/location?latitude=${lat}&longitude=${lng}&speed=${speed}`, {
-                            method: 'PATCH'
+                        // Konum verisini JSON olarak göndereceğiz
+                        const locationData = {
+                            latitude: lat,
+                            longitude: lng,
+                            speed: speed
+                        };
+                        
+                        const updateResponse = await fetch(`/api/vehicles/${vehicle.id}/location`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify(locationData)
                         });
                         
                         if (updateResponse.ok) {
                             html += `<p>✅ ${vehicle.plateNumber} konumu güncellendi. Yeni konum: ${lat.toFixed(6)}, ${lng.toFixed(6)}, Hız: ${speed} km/s</p>`;
                         } else {
                             html += `<p>❌ ${vehicle.plateNumber} konumu güncellenemedi. Hata: ${updateResponse.status}</p>`;
+                            console.error('Response:', await updateResponse.text());
                         }
                         
                     } catch (error) {
                         html += `<p>❌ ${vehicle.plateNumber} konumu güncellenemedi. Hata: ${error.message}</p>`;
+                        console.error('Error:', error);
                     }
                 }
                 
@@ -441,8 +593,18 @@
                     <h3>Hata!</h3>
                     <pre>${error.message}</pre>
                 `;
+                console.error('Error:', error);
             }
         }
+        
+        // Sayfa yüklendiğinde...
+        document.addEventListener('DOMContentLoaded', function() {
+            // SignalR bağlantısını başlat
+            startSignalRConnection();
+            
+            // Araçları yükle
+            loadVehicles();
+        });
     </script>
 </body>
 </html> 

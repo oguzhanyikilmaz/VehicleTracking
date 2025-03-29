@@ -30,8 +30,10 @@ services:
       - MongoDbSettings__ConnectionString=mongodb://vehicleTrackingAdmin:vhcTracking123!.@mongodb_vehicletracking:27017
       - MongoDbSettings__DatabaseName=VehicleTracking
       - TcpServer__Port=7001
+      - ASPNETCORE_URLS=http://+:80
     networks:
       - vehicle_tracking_network
+      - npm_default
     restart: unless-stopped
     labels:
       - "com.docker.compose.project=vehicletracking"
@@ -43,4 +45,6 @@ volumes:
 networks:
   vehicle_tracking_network:
     name: vehicle_tracking_network
+  npm_default:
+    external: true
  

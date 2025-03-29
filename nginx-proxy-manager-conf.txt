@@ -1,35 +1,58 @@
-# Nginx Proxy Manager - VehicleTracking için Örnek Yapılandırma
+# Nginx Proxy Manager - VehicleTracking için Güncel Yapılandırma
+# Sunucu IP: 161.35.71.138
 # Bu içeriği Nginx Proxy Manager arayüzünden ekleyebilirsiniz
 
 # =========================================================
 # 1. Domaininiz için Proxy Host ekleyin (Web Arayüzü)
 # =========================================================
 Proxy Host Ayarları:
-- Domain: arac.example.com
+- Domain: arac.example.com (veya kendi domaininiz)
 - Scheme: http
 - Forward Hostname / IP: vehicletracking_api
 - Forward Port: 80
-- Websockets desteğini aktifleştirin (Enable websockets support)
-- Cache ayarını devre dışı bırakın veya düşük tutun
-
-# SSL Ayarları:
-- SSL Sertifikası: Let's Encrypt (önerilen)
-- Force SSL: Açık
-- HTTP/2 Support: Açık
-- HSTS: Açık
-
-# Custom Locations (özel yollar):
-Ekstra yapılandırma gerekmez.
+- SSL: Let's Encrypt
+- Force SSL: Evet
+- Websockets Support: Evet
+- Cache Assets: Hayır
 
 # =========================================================
-# 2. TCP Server için Stream ekleyin (Opsiyonel)
+# 2. TCP Server için Stream ekleyin
 # =========================================================
-# Eğer doğrudan TCP portuna dışarıdan erişim gerekiyorsa:
-
-Stream Ayarları:
+Stream Ayarları (TCP Portları):
 - Forward Hostname / IP: vehicletracking_api
 - Forward Port: 7001
-- Dinlenecek Port: 7001 (veya dışarıya açmak istediğiniz başka bir port)
+- Listening Port: 7001
+
+# =========================================================
+# Nginx Proxy Manager Erişim Bilgileri
+# =========================================================
+# Eğer varsayılan bilgilerle kurulduysa:
+- Admin URL: http://161.35.71.138:81
+- E-posta: admin@example.com
+- Şifre: changeme (ilk girişten sonra değiştirmeniz istenecektir)
+
+# =========================================================
+# MongoDB Bağlantı Bilgileri
+# =========================================================
+# Docker içinden erişim (diğer containerlardan):
+- ConnectionString: mongodb://vehicleTrackingAdmin:vhcTracking123!.@mongodb_vehicletracking:27017/VehicleTracking
+
+# Sunucu dışından erişim (MongoDB istemcileri için):
+- ConnectionString: mongodb://vehicleTrackingAdmin:vhcTracking123!.@161.35.71.138:27018/VehicleTracking
+- Host: 161.35.71.138
+- Port: 27018
+- Kullanıcı adı: vehicleTrackingAdmin
+- Şifre: vhcTracking123!.
+- Veritabanı: VehicleTracking
+
+# =========================================================
+# VehicleTracking Web Arayüzü
+# =========================================================
+# Doğrudan IP üzerinden erişim (SSL olmadan):
+- URL: http://161.35.71.138:8001
+
+# Domain yapılandırması tamamlandıktan sonra:
+- URL: https://arac.example.com (veya kendi domaininiz)
 
 # =========================================================
 # Notlar:

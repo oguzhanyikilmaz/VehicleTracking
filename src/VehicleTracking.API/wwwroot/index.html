@@ -37,6 +37,22 @@
             margin: 0;
             font-size: 1.5rem;
         }
+        .header-actions {
+            display: flex;
+            align-items: center;
+        }
+        .test-data-link {
+            margin-right: 20px;
+            color: white;
+            text-decoration: none;
+            padding: 5px 10px;
+            background-color: #0055aa;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .test-data-link:hover {
+            background-color: #0066cc;
+        }
         .sidebar {
             width: 300px;
             background-color: #f8f9fa;
@@ -146,9 +162,12 @@
 <body>
     <div class="header">
         <h1>Araç Takip Sistemi</h1>
-        <div>
-            <span>SignalR Bağlantısı: </span>
-            <span id="connectionStatus" class="connection-status disconnected">Bağlantı Yok</span>
+        <div class="header-actions">
+            <a href="/create-test-data.html" class="test-data-link">Test Verisi Oluştur</a>
+            <div>
+                <span>SignalR Bağlantısı: </span>
+                <span id="connectionStatus" class="connection-status disconnected">Bağlantı Yok</span>
+            </div>
         </div>
     </div>
     
@@ -185,7 +204,7 @@
         // SignalR bağlantısı
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("/hubs/vehicleLocation")
-            .withAutomaticReconnect([0, 1000, 5000, 10000]) // Yeniden bağlanma stratejisi
+            .withAutomaticReconnect([0, 1000, 2000, 5000, 10000, 30000]) // Genişletilmiş yeniden bağlanma stratejisi
             .configureLogging(signalR.LogLevel.Information)
             .build();
 
@@ -213,6 +232,7 @@
 
         // Tekil konum güncellemelerini al
         connection.on("ReceiveLocationUpdate", (vehicle) => {
+            console.log("Konum güncellemesi alındı:", vehicle);
             updateVehicleOnMap(vehicle);
             updateVehicleList(vehicle);
         });
@@ -429,7 +449,7 @@
                 // Aktif araçları getir
                 fetchActiveVehicles();
             } catch (err) {
-                console.error(err);
+                console.error("SignalR Bağlantı hatası:", err);
                 connectionStatusElement.textContent = 'Bağlantı Hatası';
                 connectionStatusElement.className = 'connection-status disconnected';
                 setTimeout(startConnection, 5000);
