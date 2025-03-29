@@ -5,7 +5,7 @@ services:
     image: mongo:latest
     container_name: mongodb_vehicletracking
     ports:
-      - "27018:27017"  # Standart MongoDB portundan farklı olarak 27018 kullanıyoruz
+      - "27018:27017"
     volumes:
       - mongodb_vehicletracking_data:/data/db
     environment:
@@ -21,8 +21,8 @@ services:
       dockerfile: Dockerfile
     container_name: vehicletracking_api
     ports:
-      - "7001:7001"   # TCP Server portu (iç ve dış port aynı)
-      - "8001:80"     # HTTP port (Nginx tarafından yönlendirilecek)
+      - "7001:7001"
+      - "8001:80"
     depends_on:
       - mongodb
     environment:
@@ -32,7 +32,6 @@ services:
       - TcpServer__Port=7001
     networks:
       - vehicle_tracking_network
-      #- nginx_proxy_network  # Nginx Proxy Manager ağına bağlanmak için
     restart: unless-stopped
     labels:
       - "com.docker.compose.project=vehicletracking"
@@ -44,6 +43,4 @@ volumes:
 networks:
   vehicle_tracking_network:
     name: vehicle_tracking_network
-  # nginx_proxy_network:
-  #   name: nginx_proxy_network
-  #   external: true  # Varolan Nginx Proxy Manager ağına bağlanmak için 
+ 
