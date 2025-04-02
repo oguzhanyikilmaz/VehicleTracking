@@ -18,5 +18,14 @@ namespace VehicleTracking.Domain.Repositories
         Task<Vehicle> UpdateAsync(Vehicle vehicle);
         Task<bool> UpdateLocationAsync(string id, GeoJsonPoint<GeoJson2DGeographicCoordinates> location, double speed);
         Task<bool> DeleteAsync(string id);
+        
+        // Tenant bazlı filtreleme metodları
+        Task<Vehicle> GetByIdForTenantAsync(string id, string tenantId);
+        Task<IEnumerable<Vehicle>> GetAllForTenantAsync(string tenantId);
+        Task<IEnumerable<Vehicle>> GetActiveVehiclesForTenantAsync(string tenantId);
+        Task<IEnumerable<Vehicle>> GetVehiclesNearLocationForTenantAsync(double latitude, double longitude, double maxDistanceKm, string tenantId);
+        Task<bool> VehicleBelongsToTenantAsync(string vehicleId, string tenantId);
+
+        Task<bool> UpdateDeviceIdAsync(string vehicleId, string deviceId);
     }
 } 

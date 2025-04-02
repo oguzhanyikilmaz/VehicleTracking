@@ -19,6 +19,16 @@ namespace VehicleTracking.Application.Mapping
                 .ForMember(dest => dest.Location, opt => opt.MapFrom(src => 
                     new GeoJsonPoint<GeoJson2DGeographicCoordinates>(
                         new GeoJson2DGeographicCoordinates(src.Longitude, src.Latitude))));
+
+            // TenantCustomField entity ve DTO'ları için mapping
+            CreateMap<TenantCustomField, TenantCustomFieldDto>();
+            CreateMap<TenantCustomFieldCreateDto, TenantCustomField>();
+            CreateMap<TenantCustomFieldUpdateDto, TenantCustomField>();
+
+            // Device entity ve DTO'ları için mapping
+            CreateMap<Device, DeviceDto>();
+            CreateMap<DeviceCreateDto, Device>();
+            CreateMap<DeviceUpdateDto, Device>();
         }
     }
 } 

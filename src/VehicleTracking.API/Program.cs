@@ -1,13 +1,7 @@
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using VehicleTracking.API.Hubs;
 using VehicleTracking.API.Services;
 using VehicleTracking.Application.Mapping;
@@ -18,6 +12,8 @@ using VehicleTracking.Infrastructure.Data.BulkUpdates;
 using VehicleTracking.Infrastructure.Data.MongoDb;
 using VehicleTracking.Infrastructure.Monitoring;
 using VehicleTracking.Infrastructure.Repositories;
+using VehicleTracking.Infrastructure.Services;
+using VehicleTracking.Infrastructure.Settings;
 using VehicleTracking.Infrastructure.TCP.Interfaces;
 using VehicleTracking.Infrastructure.TCP.Models;
 using VehicleTracking.Infrastructure.TCP.Services;
@@ -70,9 +66,80 @@ if (!string.IsNullOrEmpty(mongoConnectionString))
             new[] { "mongodb", "database" }));
 }
 
+// JWT Authentication
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+builder.Services.Configure<JwtSettings>(jwtSettings);
+
+var secretKey = Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]);
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSettings["Issuer"],
+        ValidAudience = jwtSettings["Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(secretKey),
+        ClockSkew = TimeSpan.Zero
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            // SignalR bağlantıları için token'ı query string'den alma
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            
+            return Task.CompletedTask;
+        }
+    };
+});
+
+// Authorization policies
+builder.Services.AddAuthorization(options =>
+{
+    // Admin policy - sadece admin rolüne sahip kullanıcılar erişebilir
+    options.AddPolicy("RequireAdminRole", policy =>
+        policy.RequireRole("Admin"));
+    
+    // Tenant Yönetici policy - sadece tenant yöneticileri erişebilir
+    options.AddPolicy("RequireTenantAdminRole", policy =>
+        policy.RequireRole("TenantAdmin"));
+});
+
 // Services
 builder.Services.AddScoped<IVehicleRepository, VehicleRepository>();
 builder.Services.AddScoped<IVehicleService, VehicleService>();
+builder.Services.AddScoped<ITenantRepository, TenantRepository>();
+builder.Services.AddScoped<ITenantService, TenantService>();
+builder.Services.AddScoped<ITenantCustomFieldRepository, TenantCustomFieldRepository>();
+builder.Services.AddScoped<ITenantCustomFieldService, TenantCustomFieldService>();
+builder.Services.AddScoped<IDeviceRepository, DeviceRepository>();
+builder.Services.AddScoped<IDeviceService, DeviceService>();
+
+// Authentication & Authorization Services
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<IPermissionRepository, PermissionRepository>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddSingleton<ITokenService, TokenService>();
+builder.Services.AddSingleton<IPasswordService, PasswordService>();
 
 // Broadcast Service
 builder.Services.AddScoped<ILocationBroadcastService, LocationBroadcastService>();
@@ -129,6 +196,8 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
+
+app.UseAuthentication();
 app.UseAuthorization();
 
 // Health check endpoint

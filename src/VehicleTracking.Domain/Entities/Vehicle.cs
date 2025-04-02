@@ -37,6 +37,16 @@ namespace VehicleTracking.Domain.Entities
         public bool IsActive { get; set; }
 
         [BsonElement("deviceId")]
-        public string DeviceId { get; set; } = string.Empty;
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string DeviceId { get; set; }
+        
+        // Tenant ilişkisi - Araç hangi firmaya (tenant) ait
+        [BsonElement("tenantId")]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string TenantId { get; set; }
+        
+        // MongoDB'de doğrudan referans olmadığı için bu ilişki uygulama seviyesinde yönetilecek
+        [BsonIgnore]
+        public Tenant Tenant { get; set; }
     }
 } 

@@ -110,5 +110,15 @@ namespace VehicleTracking.Infrastructure.Repositories
         {
             return await _context.Vehicles.Find(v => v.DeviceId == deviceId).FirstOrDefaultAsync();
         }
+
+        public async Task<bool> UpdateDeviceIdAsync(string vehicleId, string deviceId)
+        {
+            var update = Builders<Vehicle>.Update
+                .Set(v => v.DeviceId, deviceId)
+                .Set(v => v.UpdatedAt, DateTime.UtcNow);
+
+            var result = await _context.Vehicles.UpdateOneAsync(v => v.Id == vehicleId, update);
+            return result.ModifiedCount > 0;
+        }
     }
 } 
