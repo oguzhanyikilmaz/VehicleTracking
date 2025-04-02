@@ -5,6 +5,7 @@ using AutoMapper;
 using VehicleTracking.Application.DTOs;
 using VehicleTracking.Domain.Entities;
 using VehicleTracking.Domain.Repositories;
+using System.Linq;
 
 namespace VehicleTracking.Application.Services
 {
@@ -63,10 +64,23 @@ namespace VehicleTracking.Application.Services
             return _mapper.Map<List<DeviceDto>>(devices);
         }
 
-        public async Task<List<DeviceDto>> GetUnassignedDevicesByTenantIdAsync(string tenantId)
+        public async Task<IEnumerable<DeviceDto>> GetUnassignedDevicesByTenantIdAsync(string tenantId)
         {
+            // Tenant ID için kontrol
+            if (string.IsNullOrEmpty(tenantId))
+            {
+                throw new ArgumentNullException(nameof(tenantId), "Kiracı ID boş olamaz");
+            }
+
+            // Kiracının var olduğunu kontrol et
+            if (!await _tenantRepository.ExistsByIdAsync(tenantId))
+            {
+                throw new KeyNotFoundException($"Kiracı bulunamadı (ID: {tenantId})");
+            }
+
+            // Repository üzerinden doğrudan çağır
             var devices = await _deviceRepository.GetUnassignedDevicesByTenantIdAsync(tenantId);
-            return _mapper.Map<List<DeviceDto>>(devices);
+            return _mapper.Map<IEnumerable<DeviceDto>>(devices);
         }
 
         public async Task<DeviceDto> CreateDeviceAsync(DeviceCreateDto deviceCreateDto)
@@ -145,27 +159,45 @@ namespace VehicleTracking.Application.Services
             return await _deviceRepository.DeleteAsync(id);
         }
 
-        public async Task<bool> ActivateDeviceAsync(string id)
+        public async Task<DeviceDto> ActivateDeviceAsync(string id)
         {
-            if (!await _deviceRepository.ExistsByIdAsync(id))
+            var device = await _deviceRepository.GetByIdAsync(id);
+            if (device == null)
             {
                 throw new KeyNotFoundException($"Cihaz bulunamadı (ID: {id})");
             }
 
-            return await _deviceRepository.ActivateAsync(id);
+            var result = await _deviceRepository.ActivateAsync(id);
+            if (!result)
+            {
+                throw new InvalidOperationException($"Cihaz aktifleştirilemedi (ID: {id})");
+            }
+
+            // Güncellenmiş cihazı getir
+            device = await _deviceRepository.GetByIdAsync(id);
+            return _mapper.Map<DeviceDto>(device);
         }
 
-        public async Task<bool> DeactivateDeviceAsync(string id)
+        public async Task<DeviceDto> DeactivateDeviceAsync(string id)
         {
-            if (!await _deviceRepository.ExistsByIdAsync(id))
+            var device = await _deviceRepository.GetByIdAsync(id);
+            if (device == null)
             {
                 throw new KeyNotFoundException($"Cihaz bulunamadı (ID: {id})");
             }
 
-            return await _deviceRepository.DeactivateAsync(id);
+            var result = await _deviceRepository.DeactivateAsync(id);
+            if (!result)
+            {
+                throw new InvalidOperationException($"Cihaz deaktifleştirilemedi (ID: {id})");
+            }
+
+            // Güncellenmiş cihazı getir
+            device = await _deviceRepository.GetByIdAsync(id);
+            return _mapper.Map<DeviceDto>(device);
         }
 
-        public async Task<bool> AssignDeviceToVehicleAsync(string deviceId, string vehicleId)
+        public async Task<DeviceDto> AssignDeviceToVehicleAsync(string deviceId, string vehicleId)
         {
             // Cihaz kontrolü
             var device = await _deviceRepository.GetByIdAsync(deviceId);
@@ -194,13 +226,20 @@ namespace VehicleTracking.Application.Services
             }
 
             // Cihazı araca, aracı cihaza atama işlemleri
-            await _deviceRepository.AssignToVehicleAsync(deviceId, vehicleId);
-            await _vehicleRepository.UpdateDeviceIdAsync(vehicleId, deviceId);
+            var assignResult = await _deviceRepository.AssignToVehicleAsync(deviceId, vehicleId);
+            var updateResult = await _vehicleRepository.UpdateDeviceIdAsync(vehicleId, deviceId);
 
-            return true;
+            if (!assignResult || !updateResult)
+            {
+                throw new InvalidOperationException("Cihaz araca atanamadı");
+            }
+
+            // Güncellenmiş cihazı getir
+            device = await _deviceRepository.GetByIdAsync(deviceId);
+            return _mapper.Map<DeviceDto>(device);
         }
 
-        public async Task<bool> RemoveDeviceFromVehicleAsync(string deviceId)
+        public async Task<DeviceDto> UnassignDeviceFromVehicleAsync(string deviceId)
         {
             var device = await _deviceRepository.GetByIdAsync(deviceId);
             if (device == null)
@@ -214,27 +253,40 @@ namespace VehicleTracking.Application.Services
                 await _vehicleRepository.UpdateDeviceIdAsync(device.VehicleId, null);
             }
 
-            return await _deviceRepository.RemoveFromVehicleAsync(deviceId);
+            var result = await _deviceRepository.RemoveFromVehicleAsync(deviceId);
+            if (!result)
+            {
+                throw new InvalidOperationException($"Cihaz araçtan ayrılamadı (ID: {deviceId})");
+            }
+
+            // Güncellenmiş cihazı getir
+            device = await _deviceRepository.GetByIdAsync(deviceId);
+            return _mapper.Map<DeviceDto>(device);
         }
 
-        public async Task<bool> UpdateConnectionInfoAsync(string id, string ipAddress, int port)
+        public async Task<DeviceDto> UpdateDeviceConnectionInfoAsync(string id, string ipAddress, int port, string communicationType)
         {
-            if (!await _deviceRepository.ExistsByIdAsync(id))
+            var device = await _deviceRepository.GetByIdAsync(id);
+            if (device == null)
             {
                 throw new KeyNotFoundException($"Cihaz bulunamadı (ID: {id})");
             }
 
-            return await _deviceRepository.UpdateConnectionInfoAsync(id, ipAddress, port);
+            // Cihazın bağlantı bilgilerini güncelle
+            device.IpAddress = ipAddress;
+            device.Port = port;
+            device.CommunicationType = communicationType;
+            device.LastConnectionTime = DateTime.UtcNow;
+            device.UpdatedAt = DateTime.UtcNow;
+
+            await _deviceRepository.UpdateAsync(device);
+            return _mapper.Map<DeviceDto>(device);
         }
 
-        public async Task<bool> UpdateLastConnectionTimeAsync(string id)
+        public async Task<DeviceDto> GetDeviceByVehicleIdAsync(string vehicleId)
         {
-            if (!await _deviceRepository.ExistsByIdAsync(id))
-            {
-                throw new KeyNotFoundException($"Cihaz bulunamadı (ID: {id})");
-            }
-
-            return await _deviceRepository.UpdateLastConnectionTimeAsync(id);
+            var device = await _deviceRepository.GetByVehicleIdAsync(vehicleId).ContinueWith(t => t.Result.FirstOrDefault());
+            return _mapper.Map<DeviceDto>(device);
         }
 
         public async Task<bool> DeviceExistsAsync(string id)
@@ -245,6 +297,22 @@ namespace VehicleTracking.Application.Services
         public async Task<bool> SerialNumberExistsAsync(string serialNumber)
         {
             return await _deviceRepository.ExistsBySerialNumberAsync(serialNumber);
+        }
+
+        public async Task<DeviceDto> UpdateLastConnectionTimeAsync(string id)
+        {
+            var device = await _deviceRepository.GetByIdAsync(id);
+            if (device == null)
+            {
+                throw new KeyNotFoundException($"Cihaz bulunamadı (ID: {id})");
+            }
+
+            // Son bağlantı zamanını güncelle
+            device.LastConnectionTime = DateTime.UtcNow;
+            device.UpdatedAt = DateTime.UtcNow;
+
+            await _deviceRepository.UpdateAsync(device);
+            return _mapper.Map<DeviceDto>(device);
         }
     }
 } 

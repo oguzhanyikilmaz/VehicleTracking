@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using AutoMapper;
+using Microsoft.VisualBasic.FileIO;
 using VehicleTracking.Application.DTOs;
 using VehicleTracking.Domain.Entities;
 using VehicleTracking.Domain.Repositories;
@@ -13,11 +14,13 @@ namespace VehicleTracking.Application.Services
     {
         private readonly ITenantRepository _tenantRepository;
         private readonly IMapper _mapper;
+        private readonly ITenantCustomFieldService _tenantCustomFieldService;
 
-        public TenantService(ITenantRepository tenantRepository, IMapper mapper)
+        public TenantService(ITenantRepository tenantRepository, IMapper mapper, ITenantCustomFieldService tenantCustomFieldService)
         {
             _tenantRepository = tenantRepository;
             _mapper = mapper;
+            _tenantCustomFieldService = tenantCustomFieldService;
         }
 
         public async Task<TenantDto> GetTenantByIdAsync(string id)
@@ -48,10 +51,10 @@ namespace VehicleTracking.Application.Services
 
             // Entity'ye dönüştür
             var tenant = _mapper.Map<Tenant>(tenantCreateDto);
-            
+
             // Veritabanına ekle
             var createdTenant = await _tenantRepository.AddAsync(tenant);
-            
+
             // DTO'ya dönüştür ve geri döndür
             return _mapper.Map<TenantDto>(createdTenant);
         }
@@ -66,7 +69,7 @@ namespace VehicleTracking.Application.Services
             }
 
             // İsim değiştiyse ve yeni isimde başka bir tenant varsa hata ver
-            if (existingTenant.Name != tenantUpdateDto.Name && 
+            if (existingTenant.Name != tenantUpdateDto.Name &&
                 await _tenantRepository.ExistsByNameAsync(tenantUpdateDto.Name))
             {
                 throw new InvalidOperationException($"Bu isimde bir kiracı zaten mevcut: {tenantUpdateDto.Name}");
@@ -74,10 +77,10 @@ namespace VehicleTracking.Application.Services
 
             // Değişiklikleri güncelle
             _mapper.Map(tenantUpdateDto, existingTenant);
-            
+
             // Veritabanına kaydet
             var updatedTenant = await _tenantRepository.UpdateAsync(existingTenant);
-            
+
             // DTO'ya dönüştür ve geri döndür
             return _mapper.Map<TenantDto>(updatedTenant);
         }
@@ -199,5 +202,80 @@ namespace VehicleTracking.Application.Services
                 SubscriptionEndDate = tenant.SubscriptionEndDate
             };
         }
+
+        // Özel alan yönetimi için ek metodlar
+        public async Task<bool> SetCustomFieldAsync(string tenantId, string fieldName, string fieldType, string fieldValue)
+        {
+            // Önce tenant'ın var olduğunu kontrol et
+            if (!await _tenantRepository.ExistsByIdAsync(tenantId))
+            {
+                throw new KeyNotFoundException($"Kiracı bulunamadı (ID: {tenantId})");
+            }
+
+            try
+            {
+                // TenantCustomFieldService üzerinden özel alanı ayarla
+                return await _tenantCustomFieldService.SetCustomFieldValueAsync(tenantId, fieldName, fieldType, fieldValue);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Özel alan ayarlanamadı: {ex.Message}", ex);
+            }
+        }
+
+        public async Task<string> GetCustomFieldValueAsync(string tenantId, string fieldName)
+        {
+            // Önce tenant'ın var olduğunu kontrol et
+            if (!await _tenantRepository.ExistsByIdAsync(tenantId))
+            {
+                throw new KeyNotFoundException($"Kiracı bulunamadı (ID: {tenantId})");
+            }
+
+            try
+            {
+                // TenantCustomFieldService üzerinden özel alan değerini getir
+                return await _tenantCustomFieldService.GetCustomFieldValueAsync(tenantId, fieldName);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Özel alan değeri getirilemedi: {ex.Message}", ex);
+            }
+        }
+
+        public async Task<Dictionary<string, string>> GetAllCustomFieldsAsync(string tenantId)
+        {
+            // Önce tenant'ın var olduğunu kontrol et
+            if (!await _tenantRepository.ExistsByIdAsync(tenantId))
+            {
+                throw new KeyNotFoundException($"Kiracı bulunamadı (ID: {tenantId})");
+            }
+
+            try
+            {
+                // TenantCustomFieldService üzerinden tüm özel alan değerlerini getir
+                return await _tenantCustomFieldService.GetAllCustomFieldValuesForTenantAsync(tenantId);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Özel alanlar getirilemedi: {ex.Message}", ex);
+            }
+        }
+
+        public async Task<bool> DeleteCustomFieldAsync(string tenantId, string fieldName)
+        {
+            // Önce tenant'ın var olduğunu kontrol et
+            if (!await _tenantRepository.ExistsByIdAsync(tenantId))
+                throw new KeyNotFoundException($"Kiracı bulunamadı (ID: {tenantId})");
+
+            try
+            {
+                // TenantCustomFieldService üzerinden özel alanı ayarla
+                return await _tenantCustomFieldService.DeleteCustomFieldByTenantIdAndFieldNameAsync(tenantId, fieldName);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Özel alan ayarlanamadı: {ex.Message}", ex);
+            }
+        }
     }
-} 
+}

@@ -38,32 +38,32 @@ namespace VehicleTracking.Infrastructure.Services
         public async Task<TokenResponseDto> LoginAsync(LoginDto loginDto)
         {
             var user = await _userRepository.GetByUsernameAsync(loginDto.Username);
-            
+
             if (user == null)
             {
                 throw new UnauthorizedAccessException("Kullanıcı adı veya şifre hatalı");
             }
-            
+
             if (!user.IsActive)
             {
                 throw new UnauthorizedAccessException("Hesabınız devre dışı bırakılmış. Lütfen yöneticinize başvurun");
             }
-            
+
             if (!_passwordService.VerifyPassword(user.PasswordHash, loginDto.Password))
             {
                 throw new UnauthorizedAccessException("Kullanıcı adı veya şifre hatalı");
             }
-            
+
             // Kullanıcının rollerini getir
             var roleIds = user.RoleIds;
             var roles = await _roleRepository.GetRolesByIdsAsync(roleIds);
             var roleNames = roles.Select(r => r.Name).ToList();
-            
+
             // Kullanıcının izinlerini getir
             var permissionIds = roles.SelectMany(r => r.PermissionIds).Distinct().ToList();
             var permissions = await _permissionRepository.GetPermissionsByIdsAsync(permissionIds);
             var permissionNames = permissions.Select(p => p.Name).ToList();
-            
+
             // Tenant bilgisini getir
             Tenant tenant = null;
             string tenantName = "";
@@ -75,15 +75,15 @@ namespace VehicleTracking.Infrastructure.Services
                     tenantName = tenant.Name;
                 }
             }
-            
+
             // Refresh token oluştur
             var refreshToken = _tokenService.GenerateRefreshToken();
             var refreshTokenExpiryTime = _tokenService.CalculateRefreshTokenExpiryTime();
-            
+
             // Kullanıcı bilgilerini güncelle
             await _userRepository.UpdateRefreshTokenAsync(user.Id, refreshToken, refreshTokenExpiryTime);
             await _userRepository.UpdateLastLoginTimeAsync(user.Id);
-            
+
             // User DTO oluştur
             var userDto = new UserDto
             {
@@ -110,7 +110,7 @@ namespace VehicleTracking.Infrastructure.Services
                     IsActive = r.IsActive
                 }).ToList()
             };
-            
+
             // Token yanıtı oluştur
             var tokenResponse = new TokenResponseDto
             {
@@ -119,7 +119,7 @@ namespace VehicleTracking.Infrastructure.Services
                 ExpiresIn = 60 * 60, // 1 saat (saniye cinsinden)
                 User = userDto
             };
-            
+
             return tokenResponse;
         }
 
@@ -129,24 +129,24 @@ namespace VehicleTracking.Infrastructure.Services
             {
                 throw new UnauthorizedAccessException("Geçersiz refresh token");
             }
-            
+
             var user = await _userRepository.GetByRefreshTokenAsync(refreshToken);
-            
+
             if (user == null || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
             {
                 throw new UnauthorizedAccessException("Refresh token süresi dolmuş veya geçersiz");
             }
-            
+
             // Kullanıcının rollerini getir
             var roleIds = user.RoleIds;
             var roles = await _roleRepository.GetRolesByIdsAsync(roleIds);
             var roleNames = roles.Select(r => r.Name).ToList();
-            
+
             // Kullanıcının izinlerini getir
             var permissionIds = roles.SelectMany(r => r.PermissionIds).Distinct().ToList();
             var permissions = await _permissionRepository.GetPermissionsByIdsAsync(permissionIds);
             var permissionNames = permissions.Select(p => p.Name).ToList();
-            
+
             // Tenant bilgisini getir
             Tenant tenant = null;
             string tenantName = "";
@@ -158,14 +158,14 @@ namespace VehicleTracking.Infrastructure.Services
                     tenantName = tenant.Name;
                 }
             }
-            
+
             // Yeni refresh token oluştur
             var newRefreshToken = _tokenService.GenerateRefreshToken();
             var refreshTokenExpiryTime = _tokenService.CalculateRefreshTokenExpiryTime();
-            
+
             // Kullanıcı bilgilerini güncelle
             await _userRepository.UpdateRefreshTokenAsync(user.Id, newRefreshToken, refreshTokenExpiryTime);
-            
+
             // User DTO oluştur
             var userDto = new UserDto
             {
@@ -192,7 +192,7 @@ namespace VehicleTracking.Infrastructure.Services
                     IsActive = r.IsActive
                 }).ToList()
             };
-            
+
             // Token yanıtı oluştur
             var tokenResponse = new TokenResponseDto
             {
@@ -201,7 +201,7 @@ namespace VehicleTracking.Infrastructure.Services
                 ExpiresIn = 60 * 60, // 1 saat (saniye cinsinden)
                 User = userDto
             };
-            
+
             return tokenResponse;
         }
 
@@ -211,14 +211,14 @@ namespace VehicleTracking.Infrastructure.Services
             {
                 return false;
             }
-            
+
             var user = await _userRepository.GetByRefreshTokenAsync(refreshToken);
-            
+
             if (user == null)
             {
                 return false;
             }
-            
+
             return await _userRepository.RevokeRefreshTokenAsync(user.Id);
         }
 
@@ -229,24 +229,24 @@ namespace VehicleTracking.Infrastructure.Services
             {
                 throw new InvalidOperationException("Bu kullanıcı adı zaten kullanılıyor");
             }
-            
+
             if (await _userRepository.ExistsByEmailAsync(registerDto.Email))
             {
                 throw new InvalidOperationException("Bu e-posta adresi zaten kullanılıyor");
             }
-            
+
             // Tenant kontrolü
             if (!string.IsNullOrEmpty(registerDto.TenantId) && !await _tenantRepository.ExistsByIdAsync(registerDto.TenantId))
             {
                 throw new KeyNotFoundException($"Kiracı bulunamadı (ID: {registerDto.TenantId})");
             }
-            
+
             // Şifre kontrolü
             if (registerDto.Password != registerDto.ConfirmPassword)
             {
                 throw new InvalidOperationException("Şifreler eşleşmiyor");
             }
-            
+
             // Yeni kullanıcı oluştur
             var user = new User
             {
@@ -261,17 +261,17 @@ namespace VehicleTracking.Infrastructure.Services
                 EmailConfirmed = false,
                 CreatedAt = DateTime.UtcNow
             };
-            
+
             // Varsayılan "User" rolünü bul ve ata
             var defaultUserRole = await _roleRepository.GetByNameAsync("User");
             if (defaultUserRole != null)
             {
                 user.RoleIds.Add(defaultUserRole.Id);
             }
-            
+
             // Kullanıcıyı veritabanına ekle
             var createdUser = await _userRepository.AddAsync(user);
-            
+
             // User DTO oluştur
             var userDto = new UserDto
             {
@@ -288,7 +288,7 @@ namespace VehicleTracking.Infrastructure.Services
                 TenantId = createdUser.TenantId,
                 RoleIds = createdUser.RoleIds
             };
-            
+
             // Tenant adını ekle
             if (!string.IsNullOrEmpty(createdUser.TenantId))
             {
@@ -298,22 +298,22 @@ namespace VehicleTracking.Infrastructure.Services
                     userDto.TenantName = tenant.Name;
                 }
             }
-            
+
             return userDto;
         }
 
         public async Task<bool> ForgotPasswordAsync(string email)
         {
             var user = await _userRepository.GetByEmailAsync(email);
-            
+
             if (user == null)
             {
                 return false;
             }
-            
+
             // Burada şifre sıfırlama e-postası gönderme işlemi yapılabilir
             // Şimdilik sadece kullanıcı var mı kontrolü yapıyoruz
-            
+
             return true;
         }
 
@@ -323,17 +323,17 @@ namespace VehicleTracking.Infrastructure.Services
             {
                 throw new InvalidOperationException("Şifreler eşleşmiyor");
             }
-            
+
             var user = await _userRepository.GetByIdAsync(resetPasswordDto.UserId);
-            
+
             if (user == null)
             {
                 return false;
             }
-            
+
             // Normalde şifre sıfırlama token kontrolü yapılır
             // Şimdilik token kontrolünü atlıyoruz
-            
+
             var passwordHash = _passwordService.HashPassword(resetPasswordDto.NewPassword);
             return await _userRepository.UpdatePasswordAsync(user.Id, passwordHash);
         }
@@ -341,15 +341,15 @@ namespace VehicleTracking.Infrastructure.Services
         public async Task<bool> VerifyEmailAsync(string userId, string token)
         {
             var user = await _userRepository.GetByIdAsync(userId);
-            
+
             if (user == null)
             {
                 return false;
             }
-            
+
             // Normalde token doğrulaması yapılır
             // Şimdilik token kontrolünü atlıyoruz
-            
+
             return await _userRepository.ConfirmEmailAsync(user.Id);
         }
 
@@ -359,21 +359,21 @@ namespace VehicleTracking.Infrastructure.Services
             {
                 throw new InvalidOperationException("Şifreler eşleşmiyor");
             }
-            
-            var user = await _userRepository.GetByIdAsync(changePasswordDto.UserId);
-            
+
+            var user = await _userRepository.GetByIdAsync(changePasswordDto.Id);
+
             if (user == null)
             {
                 return false;
             }
-            
+
             if (!_passwordService.VerifyPassword(user.PasswordHash, changePasswordDto.CurrentPassword))
             {
                 throw new UnauthorizedAccessException("Mevcut şifre hatalı");
             }
-            
+
             var passwordHash = _passwordService.HashPassword(changePasswordDto.NewPassword);
             return await _userRepository.UpdatePasswordAsync(user.Id, passwordHash);
         }
     }
-} 
+}

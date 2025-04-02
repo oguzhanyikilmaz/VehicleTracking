@@ -138,8 +138,9 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<IPermissionRepository, PermissionRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddSingleton<ITokenService, TokenService>();
-builder.Services.AddSingleton<IPasswordService, PasswordService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IPasswordService, PasswordService>();
+builder.Services.AddScoped<IRoleService, RoleService>();
 
 // Broadcast Service
 builder.Services.AddScoped<ILocationBroadcastService, LocationBroadcastService>();

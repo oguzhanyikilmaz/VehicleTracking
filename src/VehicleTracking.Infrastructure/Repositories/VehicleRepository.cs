@@ -115,10 +115,35 @@ namespace VehicleTracking.Infrastructure.Repositories
         {
             var update = Builders<Vehicle>.Update
                 .Set(v => v.DeviceId, deviceId)
-                .Set(v => v.UpdatedAt, DateTime.UtcNow);
+                .Set(v => v.LastUpdateTime, DateTime.UtcNow);
 
             var result = await _context.Vehicles.UpdateOneAsync(v => v.Id == vehicleId, update);
             return result.ModifiedCount > 0;
+        }
+
+        public Task<Vehicle> GetByIdForTenantAsync(string id, string tenantId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<IEnumerable<Vehicle>> GetAllForTenantAsync(string tenantId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<IEnumerable<Vehicle>> GetActiveVehiclesForTenantAsync(string tenantId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<IEnumerable<Vehicle>> GetVehiclesNearLocationForTenantAsync(double latitude, double longitude, double maxDistanceKm, string tenantId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<bool> VehicleBelongsToTenantAsync(string vehicleId, string tenantId)
+        {
+            throw new NotImplementedException();
         }
     }
 } 

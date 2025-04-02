@@ -4,246 +4,422 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VehicleTracking.Application.DTOs;
+using VehicleTracking.Application.Models;
 using VehicleTracking.Application.Services;
 
 namespace VehicleTracking.API.Controllers
 {
-    [ApiController]
-    [Route("api/[controller]")]
     [Authorize]
-    public class DevicesController : ControllerBase
+    public class DevicesController : BaseController
     {
         private readonly IDeviceService _deviceService;
-
+        
         public DevicesController(IDeviceService deviceService)
         {
             _deviceService = deviceService;
         }
-
+        
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<DeviceDto>>> GetAllDevices()
-        {
-            var devices = await _deviceService.GetAllDevicesAsync();
-            return Ok(devices);
-        }
-
-        [HttpGet("active")]
-        public async Task<ActionResult<IEnumerable<DeviceDto>>> GetActiveDevices()
-        {
-            var devices = await _deviceService.GetActiveDevicesAsync();
-            return Ok(devices);
-        }
-
-        [HttpGet("unassigned")]
-        public async Task<ActionResult<IEnumerable<DeviceDto>>> GetUnassignedDevices()
-        {
-            var devices = await _deviceService.GetUnassignedDevicesAsync();
-            return Ok(devices);
-        }
-
-        [HttpGet("tenant/{tenantId}")]
-        public async Task<ActionResult<IEnumerable<DeviceDto>>> GetDevicesByTenant(string tenantId)
-        {
-            var devices = await _deviceService.GetDevicesByTenantIdAsync(tenantId);
-            return Ok(devices);
-        }
-
-        [HttpGet("tenant/{tenantId}/unassigned")]
-        public async Task<ActionResult<IEnumerable<DeviceDto>>> GetUnassignedDevicesByTenant(string tenantId)
-        {
-            var devices = await _deviceService.GetUnassignedDevicesByTenantIdAsync(tenantId);
-            return Ok(devices);
-        }
-
-        [HttpGet("{id}")]
-        public async Task<ActionResult<DeviceDto>> GetDeviceById(string id)
-        {
-            var device = await _deviceService.GetDeviceByIdAsync(id);
-            if (device == null)
-            {
-                return NotFound();
-            }
-
-            return Ok(device);
-        }
-
-        [HttpGet("serial/{serialNumber}")]
-        public async Task<ActionResult<DeviceDto>> GetDeviceBySerialNumber(string serialNumber)
-        {
-            var device = await _deviceService.GetDeviceBySerialNumberAsync(serialNumber);
-            if (device == null)
-            {
-                return NotFound();
-            }
-
-            return Ok(device);
-        }
-
-        [HttpPost]
-        public async Task<ActionResult<DeviceDto>> CreateDevice([FromBody] DeviceCreateDto deviceCreateDto)
+        public async Task<IActionResult> GetAll()
         {
             try
             {
+                var devices = await _deviceService.GetAllDevicesAsync();
+                return Ok(devices, "Tüm cihazlar başarıyla getirildi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(string id)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Cihaz ID boş olamaz");
+                }
+                
+                var device = await _deviceService.GetDeviceByIdAsync(id);
+                if (device == null)
+                {
+                    return NotFound("Cihaz bulunamadı");
+                }
+                
+                return Ok(device, "Cihaz başarıyla getirildi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        [HttpGet("serial/{serialNumber}")]
+        public async Task<IActionResult> GetBySerialNumber(string serialNumber)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(serialNumber))
+                {
+                    return BadRequest("Seri numarası boş olamaz");
+                }
+                
+                var device = await _deviceService.GetDeviceBySerialNumberAsync(serialNumber);
+                if (device == null)
+                {
+                    return NotFound("Cihaz bulunamadı");
+                }
+                
+                return Ok(device, "Cihaz başarıyla getirildi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        [HttpGet("active")]
+        public async Task<IActionResult> GetActiveDevices()
+        {
+            try
+            {
+                var devices = await _deviceService.GetActiveDevicesAsync();
+                return Ok(devices, "Aktif cihazlar başarıyla getirildi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        [HttpGet("tenant/{tenantId}")]
+        public async Task<IActionResult> GetByTenantId(string tenantId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(tenantId))
+                {
+                    return BadRequest("Kiracı ID boş olamaz");
+                }
+                
+                var devices = await _deviceService.GetDevicesByTenantIdAsync(tenantId);
+                return Ok(devices, "Kiracıya ait cihazlar başarıyla getirildi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        [HttpGet("vehicle/{vehicleId}")]
+        public async Task<IActionResult> GetByVehicleId(string vehicleId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(vehicleId))
+                {
+                    return BadRequest("Araç ID boş olamaz");
+                }
+                
+                var device = await _deviceService.GetDeviceByVehicleIdAsync(vehicleId);
+                if (device == null)
+                {
+                    return NotFound("Araca atanmış cihaz bulunamadı");
+                }
+                
+                return Ok(device, "Araca atanmış cihaz başarıyla getirildi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        [HttpGet("unassigned")]
+        public async Task<IActionResult> GetUnassignedDevices()
+        {
+            try
+            {
+                var devices = await _deviceService.GetUnassignedDevicesAsync();
+                return Ok(devices, "Atanmamış cihazlar başarıyla getirildi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        [HttpPost]
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> Create([FromBody] DeviceCreateDto deviceCreateDto)
+        {
+            try
+            {
+                if (deviceCreateDto == null)
+                {
+                    return BadRequest("Cihaz bilgileri boş olamaz");
+                }
+                
+                if (string.IsNullOrEmpty(deviceCreateDto.SerialNumber))
+                {
+                    return BadRequest("Seri numarası boş olamaz");
+                }
+                
+                if (string.IsNullOrEmpty(deviceCreateDto.Model))
+                {
+                    return BadRequest("Model boş olamaz");
+                }
+                
                 var device = await _deviceService.CreateDeviceAsync(deviceCreateDto);
-                return CreatedAtAction(nameof(GetDeviceById), new { id = device.Id }, device);
+                return CreatedAtAction(nameof(GetById), new { id = device.Id }, device, "Cihaz başarıyla oluşturuldu");
             }
             catch (InvalidOperationException ex)
             {
                 return BadRequest(ex.Message);
             }
-            catch (KeyNotFoundException ex)
+            catch (Exception ex)
             {
-                return NotFound(ex.Message);
+                return BadRequest(ex.Message);
             }
         }
-
-        [HttpPut("{id}")]
-        public async Task<ActionResult<DeviceDto>> UpdateDevice(string id, [FromBody] DeviceUpdateDto deviceUpdateDto)
+        
+        [HttpPut]
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> Update([FromBody] DeviceUpdateDto deviceUpdateDto)
         {
             try
             {
-                if (id != deviceUpdateDto.Id)
+                if (deviceUpdateDto == null)
                 {
-                    return BadRequest("ID'ler eşleşmiyor");
+                    return BadRequest("Cihaz bilgileri boş olamaz");
                 }
-
+                
+                if (string.IsNullOrEmpty(deviceUpdateDto.Id))
+                {
+                    return BadRequest("Cihaz ID boş olamaz");
+                }
+                
                 var device = await _deviceService.UpdateDeviceAsync(deviceUpdateDto);
-                return Ok(device);
+                if (device == null)
+                {
+                    return NotFound("Cihaz bulunamadı");
+                }
+                
+                return Ok(device, "Cihaz başarıyla güncellendi");
             }
-            catch (KeyNotFoundException ex)
+            catch (InvalidOperationException ex)
             {
-                return NotFound(ex.Message);
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
             }
         }
-
+        
         [HttpDelete("{id}")]
-        public async Task<ActionResult> DeleteDevice(string id)
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> Delete(string id)
         {
-            var result = await _deviceService.DeleteDeviceAsync(id);
-            if (!result)
+            try
             {
-                return NotFound();
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Cihaz ID boş olamaz");
+                }
+                
+                var result = await _deviceService.DeleteDeviceAsync(id);
+                if (!result)
+                {
+                    return NotFound("Cihaz bulunamadı");
+                }
+                
+                return Ok("Cihaz başarıyla silindi");
             }
-
-            return NoContent();
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
-
+        
         [HttpPost("{id}/activate")]
-        public async Task<ActionResult> ActivateDevice(string id)
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> ActivateDevice(string id)
         {
             try
             {
-                var result = await _deviceService.ActivateDeviceAsync(id);
-                if (result)
+                if (string.IsNullOrEmpty(id))
                 {
-                    return NoContent();
+                    return BadRequest("Cihaz ID boş olamaz");
                 }
-                return BadRequest("Cihaz aktifleştirilemedi");
+                
+                var device = await _deviceService.ActivateDeviceAsync(id);
+                return Ok(device, "Cihaz başarıyla aktifleştirildi");
             }
             catch (KeyNotFoundException ex)
             {
                 return NotFound(ex.Message);
             }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
-
+        
         [HttpPost("{id}/deactivate")]
-        public async Task<ActionResult> DeactivateDevice(string id)
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> DeactivateDevice(string id)
         {
             try
             {
-                var result = await _deviceService.DeactivateDeviceAsync(id);
-                if (result)
+                if (string.IsNullOrEmpty(id))
                 {
-                    return NoContent();
-                }
-                return BadRequest("Cihaz deaktif edilemedi");
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(ex.Message);
-            }
-        }
-
-        [HttpPost("{deviceId}/assign/{vehicleId}")]
-        public async Task<ActionResult> AssignDeviceToVehicle(string deviceId, string vehicleId)
-        {
-            try
-            {
-                var result = await _deviceService.AssignDeviceToVehicleAsync(deviceId, vehicleId);
-                if (result)
-                {
-                    return NoContent();
-                }
-                return BadRequest("Cihaz araca atanamadı");
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(ex.Message);
-            }
-        }
-
-        [HttpPost("{deviceId}/unassign")]
-        public async Task<ActionResult> RemoveDeviceFromVehicle(string deviceId)
-        {
-            try
-            {
-                var result = await _deviceService.RemoveDeviceFromVehicleAsync(deviceId);
-                if (result)
-                {
-                    return NoContent();
-                }
-                return BadRequest("Cihaz araçtan kaldırılamadı");
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(ex.Message);
-            }
-        }
-
-        [HttpPost("{id}/connection")]
-        public async Task<ActionResult> UpdateConnectionInfo(string id, [FromBody] DeviceConnectionUpdateDto connectionUpdateDto)
-        {
-            try
-            {
-                if (id != connectionUpdateDto.DeviceId)
-                {
-                    return BadRequest("ID'ler eşleşmiyor");
-                }
-
-                var result = await _deviceService.UpdateConnectionInfoAsync(
-                    id, 
-                    connectionUpdateDto.IpAddress, 
-                    connectionUpdateDto.Port);
-
-                if (result)
-                {
-                    return NoContent();
+                    return BadRequest("Cihaz ID boş olamaz");
                 }
                 
-                return BadRequest("Bağlantı bilgileri güncellenemedi");
+                var device = await _deviceService.DeactivateDeviceAsync(id);
+                return Ok(device, "Cihaz başarıyla deaktifleştirildi");
             }
             catch (KeyNotFoundException ex)
             {
                 return NotFound(ex.Message);
             }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
-
-        [HttpPost("{id}/heartbeat")]
-        public async Task<ActionResult> UpdateLastConnectionTime(string id)
+        
+        [HttpPost("{id}/assign-to-vehicle/{vehicleId}")]
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> AssignToVehicle(string id, string vehicleId)
         {
             try
             {
-                var result = await _deviceService.UpdateLastConnectionTimeAsync(id);
-                if (result)
+                if (string.IsNullOrEmpty(id))
                 {
-                    return NoContent();
+                    return BadRequest("Cihaz ID boş olamaz");
                 }
                 
-                return BadRequest("Son bağlantı zamanı güncellenemedi");
+                if (string.IsNullOrEmpty(vehicleId))
+                {
+                    return BadRequest("Araç ID boş olamaz");
+                }
+                
+                var device = await _deviceService.AssignDeviceToVehicleAsync(id, vehicleId);
+                return Ok(device, "Cihaz araca başarıyla atandı");
             }
             catch (KeyNotFoundException ex)
             {
                 return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        [HttpPost("{id}/unassign-from-vehicle")]
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> UnassignFromVehicle(string id)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Cihaz ID boş olamaz");
+                }
+                
+                var device = await _deviceService.UnassignDeviceFromVehicleAsync(id);
+                return Ok(device, "Cihaz araçtan başarıyla ayrıldı");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        [HttpPost("{id}/update-connection-info")]
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> UpdateConnectionInfo(string id, [FromBody] DeviceConnectionInfoDto connectionInfo)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Cihaz ID boş olamaz");
+                }
+                
+                if (connectionInfo == null)
+                {
+                    return BadRequest("Bağlantı bilgileri boş olamaz");
+                }
+                
+                var device = await _deviceService.UpdateDeviceConnectionInfoAsync(id, connectionInfo.IpAddress, connectionInfo.Port, connectionInfo.CommunicationType);
+                return Ok(device, "Cihaz bağlantı bilgileri başarıyla güncellendi");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
+        [HttpPost("{id}/update-last-connection-time")]
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> UpdateLastConnectionTime(string id)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Cihaz ID boş olamaz");
+                }
+                
+                var device = await _deviceService.UpdateLastConnectionTimeAsync(id);
+                return Ok(device, "Cihaz son bağlantı zamanı başarıyla güncellendi");
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
             }
         }
     }

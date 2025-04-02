@@ -19,10 +19,13 @@ namespace VehicleTracking.Application.Services
         Task<bool> TenantExistsAsync(string id);
         Task<bool> ExistsByNameAsync(string name);
         Task<TenantUsageDto> GetTenantUsageAsync(string id);
-        
+
         // Özel alan yönetimi için ek metodlar
         Task<bool> SetCustomFieldAsync(string tenantId, string fieldName, string fieldType, string fieldValue);
+
+        Task<bool> DeleteCustomFieldAsync(string tenantId, string fieldName);
+
         Task<string> GetCustomFieldValueAsync(string tenantId, string fieldName);
         Task<Dictionary<string, string>> GetAllCustomFieldsAsync(string tenantId);
     }
-} 
+}

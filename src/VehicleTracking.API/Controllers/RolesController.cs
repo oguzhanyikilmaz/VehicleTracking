@@ -4,177 +4,282 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VehicleTracking.Application.DTOs;
+using VehicleTracking.Application.Models;
 using VehicleTracking.Application.Services;
 
 namespace VehicleTracking.API.Controllers
 {
-    [ApiController]
-    [Route("api/[controller]")]
     [Authorize(Roles = "Admin,TenantAdmin")]
-    public class RolesController : ControllerBase
+    public class RolesController : BaseController
     {
         private readonly IRoleService _roleService;
-        
+
         public RolesController(IRoleService roleService)
         {
             _roleService = roleService;
         }
-        
+
         [HttpGet]
-        public async Task<ActionResult<List<RoleDto>>> GetAll()
+        public async Task<IActionResult> GetAll()
         {
             try
             {
                 var roles = await _roleService.GetAllRolesAsync();
-                return Ok(roles);
+                return Ok(roles, "Tüm roller başarıyla getirildi");
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
         }
-        
+
         [HttpGet("{id}")]
-        public async Task<ActionResult<RoleDto>> GetById(string id)
+        public async Task<IActionResult> GetById(string id)
         {
             try
             {
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Rol ID boş olamaz");
+                }
+                
                 var role = await _roleService.GetRoleByIdAsync(id);
                 if (role == null)
                 {
-                    return NotFound(new { message = "Rol bulunamadı" });
+                    return NotFound("Rol bulunamadı");
                 }
-                
-                return Ok(role);
+
+                return Ok(role, "Rol başarıyla getirildi");
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
         }
-        
+
         [HttpGet("default")]
-        public async Task<ActionResult<List<RoleDto>>> GetDefaultRoles()
+        public async Task<IActionResult> GetDefaultRoles()
         {
             try
             {
-                var roles = await _roleService.GetDefaultRolesAsync();
-                return Ok(roles);
+                var roles = await _roleService.GetAllRolesAsync();
+                return Ok(roles, "Varsayılan roller başarıyla getirildi");
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
         }
-        
+
         [HttpPost]
-        public async Task<ActionResult<RoleDto>> Create([FromBody] RoleCreateDto roleCreateDto)
+        public async Task<IActionResult> Create([FromBody] RoleCreateDto roleCreateDto)
         {
             try
             {
-                var role = await _roleService.CreateRoleAsync(roleCreateDto);
-                return CreatedAtAction(nameof(GetById), new { id = role.Id }, role);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-        
-        [HttpPut]
-        public async Task<ActionResult<RoleDto>> Update([FromBody] RoleUpdateDto roleUpdateDto)
-        {
-            try
-            {
-                var role = await _roleService.UpdateRoleAsync(roleUpdateDto);
-                if (role == null)
+                if (roleCreateDto == null)
                 {
-                    return NotFound(new { message = "Rol bulunamadı" });
+                    return BadRequest("Rol bilgileri boş olamaz");
                 }
-                
-                return Ok(role);
+
+                if (string.IsNullOrEmpty(roleCreateDto.Name))
+                {
+                    return BadRequest("Rol adı boş olamaz");
+                }
+
+                if (await _roleService.RoleNameExistsAsync(roleCreateDto.Name))
+                {
+                    return BadRequest($"'{roleCreateDto.Name}' adında bir rol zaten mevcut");
+                }
+
+                var role = await _roleService.CreateRoleAsync(roleCreateDto);
+                return CreatedAtAction(nameof(GetById), new { id = role.Id }, role, "Rol başarıyla oluşturuldu");
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
         }
-        
-        [HttpDelete("{id}")]
-        public async Task<ActionResult> Delete(string id)
+
+        [HttpPut]
+        public async Task<IActionResult> Update([FromBody] RoleUpdateDto roleUpdateDto)
         {
             try
             {
+                if (roleUpdateDto == null)
+                {
+                    return BadRequest("Rol bilgileri boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(roleUpdateDto.Id))
+                {
+                    return BadRequest("Rol ID boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(roleUpdateDto.Name))
+                {
+                    return BadRequest("Rol adı boş olamaz");
+                }
+
+                if (!await _roleService.RoleExistsAsync(roleUpdateDto.Id))
+                {
+                    return NotFound("Rol bulunamadı");
+                }
+
+                // Rol adı var mı ve aynı ID'ye sahip değil mi kontrol et
+                var existingByName = await _roleService.GetRoleByNameAsync(roleUpdateDto.Name);
+                if (existingByName != null && existingByName.Id != roleUpdateDto.Id)
+                {
+                    return BadRequest($"'{roleUpdateDto.Name}' adında bir rol zaten mevcut");
+                }
+
+                var role = await _roleService.UpdateRoleAsync(roleUpdateDto);
+                return Ok(role, "Rol başarıyla güncellendi");
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(string id)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Rol ID boş olamaz");
+                }
+
+                if (!await _roleService.RoleExistsAsync(id))
+                {
+                    return NotFound("Rol bulunamadı");
+                }
+
                 var result = await _roleService.DeleteRoleAsync(id);
                 if (!result)
                 {
-                    return NotFound(new { message = "Rol bulunamadı" });
+                    return BadRequest("Rol silinemedi");
                 }
-                
-                return Ok(new { message = "Rol başarıyla silindi" });
+
+                return Ok("Rol başarıyla silindi");
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
         }
-        
+
         [HttpPost("assign-permission")]
-        public async Task<ActionResult> AssignPermission([FromBody] RolePermissionDto rolePermissionDto)
+        public async Task<IActionResult> AssignPermission([FromBody] RolePermissionDto rolePermissionDto)
         {
             try
             {
-                var result = await _roleService.AddPermissionToRoleAsync(rolePermissionDto.RoleId, rolePermissionDto.PermissionId);
+                if (rolePermissionDto == null)
+                {
+                    return BadRequest("Rol-izin bilgileri boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(rolePermissionDto.RoleId))
+                {
+                    return BadRequest("Rol ID boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(rolePermissionDto.PermissionId))
+                {
+                    return BadRequest("İzin ID boş olamaz");
+                }
+
+                // Rol var mı kontrol et
+                if (!await _roleService.RoleExistsAsync(rolePermissionDto.RoleId))
+                {
+                    return NotFound("Rol bulunamadı");
+                }
+
+                var result = await _roleService.AssignPermissionToRoleAsync(rolePermissionDto.RoleId, rolePermissionDto.PermissionId);
                 if (!result)
                 {
-                    return NotFound(new { message = "Rol veya izin bulunamadı" });
+                    return BadRequest("İzin rol ile ilişkilendirilemedi");
                 }
-                
-                return Ok(new { message = "İzin başarıyla atandı" });
+
+                return Ok("İzin başarıyla atandı");
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
         }
-        
+
         [HttpPost("remove-permission")]
-        public async Task<ActionResult> RemovePermission([FromBody] RolePermissionDto rolePermissionDto)
+        public async Task<IActionResult> RemovePermission([FromBody] RolePermissionDto rolePermissionDto)
         {
             try
             {
+                if (rolePermissionDto == null)
+                {
+                    return BadRequest("Rol-izin bilgileri boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(rolePermissionDto.RoleId))
+                {
+                    return BadRequest("Rol ID boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(rolePermissionDto.PermissionId))
+                {
+                    return BadRequest("İzin ID boş olamaz");
+                }
+
+                // Rol var mı kontrol et
+                if (!await _roleService.RoleExistsAsync(rolePermissionDto.RoleId))
+                {
+                    return NotFound("Rol bulunamadı");
+                }
+
                 var result = await _roleService.RemovePermissionFromRoleAsync(rolePermissionDto.RoleId, rolePermissionDto.PermissionId);
                 if (!result)
                 {
-                    return NotFound(new { message = "Rol veya izin bulunamadı" });
+                    return BadRequest("İzin rolden kaldırılamadı");
                 }
-                
-                return Ok(new { message = "İzin başarıyla kaldırıldı" });
+
+                return Ok("İzin başarıyla kaldırıldı");
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
         }
-        
+
         [HttpGet("{roleId}/permissions")]
-        public async Task<ActionResult<List<PermissionDto>>> GetRolePermissions(string roleId)
+        public async Task<IActionResult> GetRolePermissions(string roleId)
         {
             try
             {
+                if (string.IsNullOrEmpty(roleId))
+                {
+                    return BadRequest("Rol ID boş olamaz");
+                }
+
+                if (!await _roleService.RoleExistsAsync(roleId))
+                {
+                    return NotFound("Rol bulunamadı");
+                }
+
                 var permissions = await _roleService.GetRolePermissionsAsync(roleId);
-                return Ok(permissions);
+                return Ok(permissions, "Rol izinleri başarıyla getirildi");
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
         }
     }
-    
-    public class RolePermissionDto
-    {
-        public string RoleId { get; set; } = string.Empty;
-        public string PermissionId { get; set; } = string.Empty;
-    }
-} 
+}

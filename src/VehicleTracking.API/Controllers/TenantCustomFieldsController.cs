@@ -4,112 +4,81 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VehicleTracking.Application.DTOs;
+using VehicleTracking.Application.Models;
 using VehicleTracking.Application.Services;
 
 namespace VehicleTracking.API.Controllers
 {
-    [ApiController]
-    [Route("api/tenants/{tenantId}/customfields")]
-    [Authorize]
-    public class TenantCustomFieldsController : ControllerBase
+    [Authorize(Roles = "Admin,TenantAdmin")]
+    public class TenantCustomFieldsController : BaseController
     {
-        private readonly ITenantCustomFieldService _tenantCustomFieldService;
-        private readonly ITenantService _tenantService;
+        private readonly ITenantCustomFieldService _customFieldService;
 
-        public TenantCustomFieldsController(
-            ITenantCustomFieldService tenantCustomFieldService,
-            ITenantService tenantService)
+        public TenantCustomFieldsController(ITenantCustomFieldService customFieldService)
         {
-            _tenantCustomFieldService = tenantCustomFieldService;
-            _tenantService = tenantService;
+            _customFieldService = customFieldService;
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<TenantCustomFieldDto>>> GetCustomFields(string tenantId)
+        public async Task<IActionResult> GetAll()
         {
-            // Kiracı var mı kontrol et
-            if (!await _tenantService.TenantExistsAsync(tenantId))
+            try
             {
-                return NotFound($"Kiracı bulunamadı (ID: {tenantId})");
+                var customFields = await _customFieldService.GetAllCustomFieldsAsync();
+                return Ok(customFields, "Tüm özel alanlar başarıyla getirildi");
             }
-
-            var customFields = await _tenantCustomFieldService.GetCustomFieldsByTenantIdAsync(tenantId);
-            return Ok(customFields);
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
-        [HttpGet("{fieldName}")]
-        public async Task<ActionResult<TenantCustomFieldDto>> GetCustomField(string tenantId, string fieldName)
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(string id)
         {
-            // Kiracı var mı kontrol et
-            if (!await _tenantService.TenantExistsAsync(tenantId))
+            try
             {
-                return NotFound($"Kiracı bulunamadı (ID: {tenantId})");
-            }
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Özel alan ID boş olamaz");
+                }
 
-            var customField = await _tenantCustomFieldService.GetCustomFieldByTenantIdAndFieldNameAsync(tenantId, fieldName);
-            if (customField == null)
+                var customField = await _customFieldService.GetCustomFieldByIdAsync(id);
+                if (customField == null)
+                {
+                    return NotFound("Özel alan bulunamadı");
+                }
+
+                return Ok(customField, "Özel alan başarıyla getirildi");
+            }
+            catch (Exception ex)
             {
-                return NotFound($"Özel alan bulunamadı: {fieldName}");
+                return BadRequest(ex.Message);
             }
-
-            return Ok(customField);
         }
 
         [HttpPost]
-        public async Task<ActionResult<TenantCustomFieldDto>> CreateCustomField(string tenantId, [FromBody] TenantCustomFieldCreateDto createDto)
+        public async Task<IActionResult> CreateCustomField([FromBody] TenantCustomFieldCreateDto createDto)
         {
             try
             {
-                // Kiracı var mı kontrol et
-                if (!await _tenantService.TenantExistsAsync(tenantId))
+                if (createDto == null)
                 {
-                    return NotFound($"Kiracı bulunamadı (ID: {tenantId})");
+                    return BadRequest("Özel alan bilgileri boş olamaz");
                 }
 
-                // Tenant ID'yi yol parametresinden al
-                createDto.TenantId = tenantId;
-
-                var customField = await _tenantCustomFieldService.CreateCustomFieldAsync(createDto);
-                return CreatedAtAction(nameof(GetCustomField), 
-                    new { tenantId = tenantId, fieldName = customField.FieldName }, 
-                    customField);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(ex.Message);
-            }
-        }
-
-        [HttpPut("{fieldName}")]
-        public async Task<ActionResult<TenantCustomFieldDto>> UpdateCustomField(
-            string tenantId, 
-            string fieldName, 
-            [FromBody] TenantCustomFieldUpdateDto updateDto)
-        {
-            try
-            {
-                // Kiracı var mı kontrol et
-                if (!await _tenantService.TenantExistsAsync(tenantId))
+                if (string.IsNullOrEmpty(createDto.TenantId))
                 {
-                    return NotFound($"Kiracı bulunamadı (ID: {tenantId})");
+                    return BadRequest("Kiracı ID boş olamaz");
                 }
 
-                // Özel alan var mı kontrol et
-                var existingField = await _tenantCustomFieldService.GetCustomFieldByTenantIdAndFieldNameAsync(tenantId, fieldName);
-                if (existingField == null)
+                if (string.IsNullOrEmpty(createDto.FieldName))
                 {
-                    return NotFound($"Özel alan bulunamadı: {fieldName}");
+                    return BadRequest("Alan adı boş olamaz");
                 }
 
-                // Güncelleme için ID ve FieldName parametrelerini ayarla
-                updateDto.Id = existingField.Id;
-                if (string.IsNullOrEmpty(updateDto.FieldName))
-                {
-                    updateDto.FieldName = fieldName;
-                }
-
-                var updatedField = await _tenantCustomFieldService.UpdateCustomFieldAsync(updateDto);
-                return Ok(updatedField);
+                var customField = await _customFieldService.CreateCustomFieldAsync(createDto);
+                return CreatedAtAction(nameof(GetById), new { id = customField.Id }, customField, "Özel alan başarıyla oluşturuldu");
             }
             catch (KeyNotFoundException ex)
             {
@@ -119,92 +88,92 @@ namespace VehicleTracking.API.Controllers
             {
                 return BadRequest(ex.Message);
             }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
-        [HttpDelete("{fieldName}")]
-        public async Task<ActionResult> DeleteCustomField(string tenantId, string fieldName)
-        {
-            // Kiracı var mı kontrol et
-            if (!await _tenantService.TenantExistsAsync(tenantId))
-            {
-                return NotFound($"Kiracı bulunamadı (ID: {tenantId})");
-            }
-
-            var result = await _tenantCustomFieldService.DeleteCustomFieldByTenantIdAndFieldNameAsync(tenantId, fieldName);
-            if (!result)
-            {
-                return NotFound($"Özel alan bulunamadı: {fieldName}");
-            }
-
-            return NoContent();
-        }
-
-        [HttpGet("values")]
-        public async Task<ActionResult<Dictionary<string, string>>> GetAllCustomFieldValues(string tenantId)
-        {
-            // Kiracı var mı kontrol et
-            if (!await _tenantService.TenantExistsAsync(tenantId))
-            {
-                return NotFound($"Kiracı bulunamadı (ID: {tenantId})");
-            }
-
-            var values = await _tenantService.GetAllCustomFieldsAsync(tenantId);
-            return Ok(values);
-        }
-
-        [HttpGet("values/{fieldName}")]
-        public async Task<ActionResult<string>> GetCustomFieldValue(string tenantId, string fieldName)
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateCustomField(string id, [FromBody] TenantCustomFieldUpdateDto updateDto)
         {
             try
             {
-                // Kiracı var mı kontrol et
-                if (!await _tenantService.TenantExistsAsync(tenantId))
+                if (string.IsNullOrEmpty(id))
                 {
-                    return NotFound($"Kiracı bulunamadı (ID: {tenantId})");
+                    return BadRequest("Özel alan ID boş olamaz");
                 }
 
-                var value = await _tenantService.GetCustomFieldValueAsync(tenantId, fieldName);
-                if (value == null)
+                if (updateDto == null)
                 {
-                    return NotFound($"Özel alan bulunamadı: {fieldName}");
+                    return BadRequest("Özel alan bilgileri boş olamaz");
                 }
 
-                return Ok(value);
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(ex.Message);
-            }
-        }
+                updateDto.Id = id;
 
-        [HttpPost("values")]
-        public async Task<ActionResult> SetCustomFieldValue(
-            string tenantId, 
-            [FromBody] TenantCustomFieldValueDto valueDto)
-        {
-            try
-            {
-                // Kiracı var mı kontrol et
-                if (!await _tenantService.TenantExistsAsync(tenantId))
+                var updatedField = await _customFieldService.UpdateCustomFieldAsync(updateDto);
+                if (updatedField == null)
                 {
-                    return NotFound($"Kiracı bulunamadı (ID: {tenantId})");
+                    return NotFound("Özel alan bulunamadı");
                 }
 
-                // Alan tipini otomatik olarak string olarak ayarla (basitleştirme için)
-                // Gerçek uygulamada, değerin tipine göre doğru tip belirlenmeli
-                string fieldType = "String";
-
-                await _tenantService.SetCustomFieldAsync(tenantId, valueDto.FieldName, fieldType, valueDto.FieldValue);
-                return NoContent();
+                return Ok(updatedField, "Özel alan başarıyla güncellendi");
             }
             catch (KeyNotFoundException ex)
             {
                 return NotFound(ex.Message);
             }
             catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteCustomField(string id)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Özel alan ID boş olamaz");
+                }
+
+                var result = await _customFieldService.DeleteCustomFieldAsync(id);
+                if (!result)
+                {
+                    return NotFound("Özel alan bulunamadı");
+                }
+
+                return Ok("Özel alan başarıyla silindi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpGet("tenant/{tenantId}")]
+        public async Task<IActionResult> GetByTenantId(string tenantId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(tenantId))
+                {
+                    return BadRequest("Kiracı ID boş olamaz");
+                }
+
+                var customFields = await _customFieldService.GetCustomFieldsByTenantIdAsync(tenantId);
+                return Ok(customFields, "Kiracıya ait özel alanlar başarıyla getirildi");
+            }
+            catch (Exception ex)
             {
                 return BadRequest(ex.Message);
             }
         }
     }
-} 
+}

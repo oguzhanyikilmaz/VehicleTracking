@@ -1,20 +1,21 @@
-using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using VehicleTracking.Application.DTOs;
+using VehicleTracking.Application.Models;
 using VehicleTracking.Application.Services;
 using VehicleTracking.API.Services;
 
 namespace VehicleTracking.API.Controllers
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    public class VehiclesController : ControllerBase
+    [Authorize]
+    public class VehiclesController : BaseController
     {
         private readonly IVehicleService _vehicleService;
         private readonly ILocationBroadcastService _locationBroadcastService;
-
+        
         public VehiclesController(
             IVehicleService vehicleService,
             ILocationBroadcastService locationBroadcastService)
@@ -22,135 +23,258 @@ namespace VehicleTracking.API.Controllers
             _vehicleService = vehicleService;
             _locationBroadcastService = locationBroadcastService;
         }
-
+        
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<VehicleDto>>> GetAllVehicles()
+        public async Task<IActionResult> GetAll()
         {
-            var vehicles = await _vehicleService.GetAllVehiclesAsync();
-            return Ok(vehicles);
+            try
+            {
+                var vehicles = await _vehicleService.GetAllVehiclesAsync();
+                return Ok(vehicles, "Tüm araçlar başarıyla getirildi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
-
+        
         [HttpGet("active")]
-        public async Task<ActionResult<IEnumerable<VehicleDto>>> GetActiveVehicles()
+        public async Task<IActionResult> GetActiveVehicles()
         {
-            var vehicles = await _vehicleService.GetActiveVehiclesAsync();
-            return Ok(vehicles);
+            try
+            {
+                var vehicles = await _vehicleService.GetActiveVehiclesAsync();
+                return Ok(vehicles, "Aktif araçlar başarıyla getirildi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
-
+        
         [HttpGet("{id}")]
-        public async Task<ActionResult<VehicleDto>> GetVehicle(string id)
+        public async Task<IActionResult> GetById(string id)
         {
-            var vehicle = await _vehicleService.GetVehicleByIdAsync(id);
-            if (vehicle == null)
-                return NotFound();
+            try
+            {
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Araç ID boş olamaz");
+                }
 
-            return Ok(vehicle);
+                var vehicle = await _vehicleService.GetVehicleByIdAsync(id);
+                if (vehicle == null)
+                {
+                    return NotFound("Araç bulunamadı");
+                }
+                
+                return Ok(vehicle, "Araç başarıyla getirildi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
-
+        
         [HttpGet("device/{deviceId}")]
-        public async Task<ActionResult<VehicleDto>> GetVehicleByDeviceId(string deviceId)
+        public async Task<IActionResult> GetByDeviceId(string deviceId)
         {
-            var vehicle = await _vehicleService.GetVehicleByDeviceIdAsync(deviceId);
-            if (vehicle == null)
-                return NotFound();
+            try
+            {
+                if (string.IsNullOrEmpty(deviceId))
+                {
+                    return BadRequest("Cihaz ID boş olamaz");
+                }
 
-            return Ok(vehicle);
+                var vehicle = await _vehicleService.GetVehicleByDeviceIdAsync(deviceId);
+                if (vehicle == null)
+                {
+                    return NotFound("Cihaza ait araç bulunamadı");
+                }
+                
+                return Ok(vehicle, "Cihaza ait araç başarıyla getirildi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
-
+        
         [HttpGet("near")]
-        public async Task<ActionResult<IEnumerable<VehicleDto>>> GetVehiclesNearLocation(
+        public async Task<IActionResult> GetVehiclesNearLocation(
             [FromQuery] double latitude,
             [FromQuery] double longitude,
             [FromQuery] double maxDistanceKm = 10)
         {
-            var vehicles = await _vehicleService.GetVehiclesNearLocationAsync(
-                latitude, longitude, maxDistanceKm);
-            return Ok(vehicles);
+            try
+            {
+                var vehicles = await _vehicleService.GetVehiclesNearLocationAsync(latitude, longitude, maxDistanceKm);
+                return Ok(vehicles, "Bölgedeki araçlar başarıyla getirildi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
-
+        
         [HttpPost]
-        public async Task<ActionResult<VehicleDto>> CreateVehicle(VehicleDto vehicleDto)
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> Create([FromBody] VehicleDto vehicleDto)
         {
-            var result = await _vehicleService.AddVehicleAsync(vehicleDto);
-            return CreatedAtAction(nameof(GetVehicle), new { id = result.Id }, result);
-        }
+            try
+            {
+                if (vehicleDto == null)
+                {
+                    return BadRequest("Araç bilgileri boş olamaz");
+                }
 
+                var vehicle = await _vehicleService.AddVehicleAsync(vehicleDto);
+                return CreatedAtAction(nameof(GetById), new { id = vehicle.Id }, vehicle, "Araç başarıyla oluşturuldu");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateVehicle(string id, VehicleDto vehicleDto)
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> Update(string id, [FromBody] VehicleDto vehicleDto)
         {
-            if (id != vehicleDto.Id)
-                return BadRequest();
+            try
+            {
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Araç ID boş olamaz");
+                }
 
-            var updated = await _vehicleService.UpdateVehicleAsync(vehicleDto);
-            if (updated == null)
-                return NotFound();
+                if (vehicleDto == null)
+                {
+                    return BadRequest("Araç bilgileri boş olamaz");
+                }
                 
-            return NoContent();
+                if (id != vehicleDto.Id)
+                {
+                    return BadRequest("ID'ler eşleşmiyor");
+                }
+                
+                var vehicle = await _vehicleService.UpdateVehicleAsync(vehicleDto);
+                if (vehicle == null)
+                {
+                    return NotFound("Araç bulunamadı");
+                }
+                
+                return Ok(vehicle, "Araç başarıyla güncellendi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
-
+        
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> Delete(string id)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Araç ID boş olamaz");
+                }
+                
+                var result = await _vehicleService.DeleteVehicleAsync(id);
+                if (!result)
+                {
+                    return NotFound("Araç bulunamadı");
+                }
+                
+                return Ok("Araç başarıyla silindi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        
         [HttpPost("{id}/location")]
         public async Task<IActionResult> UpdateLocationPost(string id, [FromBody] LocationUpdateDto locationDto)
         {
-            if (locationDto == null)
-                return BadRequest("Konum bilgisi gereklidir.");
-                
-            var success = await _vehicleService.UpdateVehicleLocationAsync(
-                id, 
-                locationDto.Latitude, 
-                locationDto.Longitude, 
-                locationDto.Speed);
-                
-            if (!success)
-                return NotFound();
-                
-            // Güncellenmiş aracı al
-            var updatedVehicle = await _vehicleService.GetVehicleByIdAsync(id);
-            if (updatedVehicle != null)
+            try
             {
-                // SignalR üzerinden güncel konumu yayınla
-                await _locationBroadcastService.BroadcastVehicleLocationAsync(updatedVehicle);
-            }
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Araç ID boş olamaz");
+                }
                 
-            return NoContent();
+                if (locationDto == null)
+                {
+                    return BadRequest("Konum bilgisi gereklidir");
+                }
+                
+                var success = await _vehicleService.UpdateVehicleLocationAsync(
+                    id,
+                    locationDto.Latitude,
+                    locationDto.Longitude,
+                    locationDto.Speed);
+                    
+                if (!success)
+                {
+                    return NotFound("Araç bulunamadı");
+                }
+                
+                // Güncellenmiş aracı al
+                var updatedVehicle = await _vehicleService.GetVehicleByIdAsync(id);
+                if (updatedVehicle != null)
+                {
+                    // SignalR üzerinden güncel konumu yayınla
+                    await _locationBroadcastService.BroadcastVehicleLocationAsync(updatedVehicle);
+                    return Ok(updatedVehicle, "Araç konumu başarıyla güncellendi");
+                }
+                
+                return Ok("Araç konumu başarıyla güncellendi");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
-
+        
         [HttpPatch("{id}/location")]
         public async Task<IActionResult> UpdateLocation(
-            string id, 
-            [FromQuery] double latitude, 
-            [FromQuery] double longitude, 
+            string id,
+            [FromQuery] double latitude,
+            [FromQuery] double longitude,
             [FromQuery] double speed)
         {
-            var success = await _vehicleService.UpdateVehicleLocationAsync(id, latitude, longitude, speed);
-            if (!success)
-                return NotFound();
-                
-            // Güncellenmiş aracı al
-            var updatedVehicle = await _vehicleService.GetVehicleByIdAsync(id);
-            if (updatedVehicle != null)
+            try
             {
-                // SignalR üzerinden güncel konumu yayınla
-                await _locationBroadcastService.BroadcastVehicleLocationAsync(updatedVehicle);
+                if (string.IsNullOrEmpty(id))
+                {
+                    return BadRequest("Araç ID boş olamaz");
+                }
+                
+                var success = await _vehicleService.UpdateVehicleLocationAsync(id, latitude, longitude, speed);
+                if (!success)
+                {
+                    return NotFound("Araç bulunamadı");
+                }
+                
+                // Güncellenmiş aracı al
+                var updatedVehicle = await _vehicleService.GetVehicleByIdAsync(id);
+                if (updatedVehicle != null)
+                {
+                    // SignalR üzerinden güncel konumu yayınla
+                    await _locationBroadcastService.BroadcastVehicleLocationAsync(updatedVehicle);
+                    return Ok(updatedVehicle, "Araç konumu başarıyla güncellendi");
+                }
+                
+                return Ok("Araç konumu başarıyla güncellendi");
             }
-                
-            return NoContent();
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
-
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteVehicle(string id)
-        {
-            var success = await _vehicleService.DeleteVehicleAsync(id);
-            if (!success)
-                return NotFound();
-                
-            return NoContent();
-        }
-    }
-
-    public class LocationUpdateDto
-    {
-        public double Latitude { get; set; }
-        public double Longitude { get; set; }
-        public double Speed { get; set; }
     }
 }

@@ -3,186 +3,252 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VehicleTracking.Application.DTOs;
+using VehicleTracking.Application.Models;
 using VehicleTracking.Application.Services;
 
 namespace VehicleTracking.API.Controllers
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    public class AuthController : ControllerBase
+    [AllowAnonymous]
+    public class AuthController : BaseController
     {
         private readonly IAuthService _authService;
-        
+
         public AuthController(IAuthService authService)
         {
             _authService = authService;
         }
-        
+
         [HttpPost("login")]
-        public async Task<ActionResult<TokenResponseDto>> Login([FromBody] LoginDto loginDto)
+        public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
         {
             try
             {
-                var response = await _authService.LoginAsync(loginDto);
-                return Ok(response);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return Unauthorized(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-        
-        [HttpPost("refresh-token")]
-        public async Task<ActionResult<TokenResponseDto>> RefreshToken([FromBody] RefreshTokenDto refreshTokenDto)
-        {
-            try
-            {
-                var response = await _authService.RefreshTokenAsync(refreshTokenDto.RefreshToken);
-                return Ok(response);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return Unauthorized(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-        
-        [HttpPost("logout")]
-        [Authorize]
-        public async Task<ActionResult> Logout([FromBody] RefreshTokenDto refreshTokenDto)
-        {
-            try
-            {
-                var result = await _authService.LogoutAsync(refreshTokenDto.RefreshToken);
-                if (result)
+                if (loginDto == null)
                 {
-                    return Ok(new { message = "Başarıyla çıkış yapıldı" });
+                    return BadRequest("Giriş bilgileri boş olamaz");
                 }
-                
-                return BadRequest(new { message = "Çıkış yapılırken bir hata oluştu" });
+
+                if (string.IsNullOrEmpty(loginDto.Username))
+                {
+                    return BadRequest("Kullanıcı adı boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(loginDto.Password))
+                {
+                    return BadRequest("Şifre boş olamaz");
+                }
+
+                var tokenResponse = await _authService.LoginAsync(loginDto);
+                return Ok(tokenResponse, "Giriş başarılı");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
         }
-        
+
         [HttpPost("register")]
-        public async Task<ActionResult<UserDto>> Register([FromBody] RegisterDto registerDto)
+        [Authorize(Roles = "Admin,TenantAdmin")]
+        public async Task<IActionResult> Register([FromBody] RegisterDto registerDto)
         {
             try
             {
+                if (registerDto == null)
+                {
+                    return BadRequest("Kayıt bilgileri boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(registerDto.Username))
+                {
+                    return BadRequest("Kullanıcı adı boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(registerDto.Email))
+                {
+                    return BadRequest("E-posta adresi boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(registerDto.Password))
+                {
+                    return BadRequest("Şifre boş olamaz");
+                }
+
                 var user = await _authService.RegisterAsync(registerDto);
-                return Ok(user);
+                return Ok(user, "Kullanıcı başarıyla kaydedildi");
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { message = ex.Message });
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
         }
-        
-        [HttpPost("forgot-password")]
-        public async Task<ActionResult> ForgotPassword([FromBody] ForgotPasswordDto forgotPasswordDto)
+
+        [HttpPost("refresh-token")]
+        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDto refreshTokenRequest)
         {
             try
             {
-                var result = await _authService.ForgotPasswordAsync(forgotPasswordDto.Email);
-                if (result)
+                if (refreshTokenRequest == null)
                 {
-                    return Ok(new { message = "Şifre sıfırlama talimatları e-posta adresinize gönderildi" });
+                    return BadRequest("Token bilgisi boş olamaz");
                 }
-                
-                return NotFound(new { message = "Bu e-posta adresine sahip bir kullanıcı bulunamadı" });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-        
-        [HttpPost("reset-password")]
-        public async Task<ActionResult> ResetPassword([FromBody] ResetPasswordDto resetPasswordDto)
-        {
-            try
-            {
-                var result = await _authService.ResetPasswordAsync(resetPasswordDto);
-                if (result)
+
+                if (string.IsNullOrEmpty(refreshTokenRequest.RefreshToken))
                 {
-                    return Ok(new { message = "Şifreniz başarıyla sıfırlandı" });
+                    return BadRequest("Yenileme token'ı boş olamaz");
                 }
-                
-                return BadRequest(new { message = "Şifre sıfırlanırken bir hata oluştu" });
+
+                var tokenResponse = await _authService.RefreshTokenAsync(refreshTokenRequest.RefreshToken);
+                return Ok(tokenResponse, "Token başarıyla yenilendi");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
         }
-        
-        [HttpPost("verify-email")]
-        public async Task<ActionResult> VerifyEmail([FromBody] VerifyEmailDto verifyEmailDto)
-        {
-            try
-            {
-                var result = await _authService.VerifyEmailAsync(verifyEmailDto.UserId, verifyEmailDto.Token);
-                if (result)
-                {
-                    return Ok(new { message = "E-posta adresiniz doğrulandı" });
-                }
-                
-                return BadRequest(new { message = "E-posta doğrulanırken bir hata oluştu" });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-        
+
         [HttpPost("change-password")]
         [Authorize]
-        public async Task<ActionResult> ChangePassword([FromBody] ChangePasswordDto changePasswordDto)
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto changePasswordDto)
         {
             try
             {
-                var result = await _authService.ChangePasswordAsync(changePasswordDto);
-                if (result)
+                if (changePasswordDto == null)
                 {
-                    return Ok(new { message = "Şifreniz başarıyla değiştirildi" });
+                    return BadRequest("Şifre değiştirme bilgileri boş olamaz");
                 }
-                
-                return BadRequest(new { message = "Şifre değiştirilirken bir hata oluştu" });
+
+                if (string.IsNullOrEmpty(changePasswordDto.Id))
+                {
+                    return BadRequest("Kullanıcı ID boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(changePasswordDto.CurrentPassword))
+                {
+                    return BadRequest("Mevcut şifre boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(changePasswordDto.NewPassword))
+                {
+                    return BadRequest("Yeni şifre boş olamaz");
+                }
+
+                var result = await _authService.ChangePasswordAsync(changePasswordDto);
+                if (!result)
+                {
+                    return BadRequest("Şifre değiştirilemedi");
+                }
+
+                return Ok("Şifre başarıyla değiştirildi");
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { message = ex.Message });
+                return Unauthorized(ex.Message);
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto resetPasswordDto)
+        {
+            try
+            {
+                if (resetPasswordDto == null)
+                {
+                    return BadRequest("Şifre sıfırlama bilgileri boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(resetPasswordDto.UserId))
+                {
+                    return BadRequest("Kullanıcı ID boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(resetPasswordDto.Token))
+                {
+                    return BadRequest("Sıfırlama token'ı boş olamaz");
+                }
+
+                if (string.IsNullOrEmpty(resetPasswordDto.NewPassword))
+                {
+                    return BadRequest("Yeni şifre boş olamaz");
+                }
+
+                var result = await _authService.ResetPasswordAsync(resetPasswordDto);
+                if (!result)
+                {
+                    return BadRequest("Şifre sıfırlanamadı");
+                }
+
+                return Ok("Şifreniz başarıyla sıfırlandı");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPost("logout")]
+        [Authorize]
+        public async Task<IActionResult> Logout()
+        {
+            try
+            {
+                var userId = User.Identity?.Name;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized("Kullanıcı kimliği alınamadı");
+                }
+
+                var result = await _authService.LogoutAsync(userId);
+                if (!result)
+                {
+                    return BadRequest("Çıkış yapılamadı");
+                }
+
+                return Ok("Başarıyla çıkış yapıldı");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
             }
         }
     }
-} 
+}

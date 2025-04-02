@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using VehicleTracking.Domain.Entities;
+using VehicleTracking.Infrastructure.Data.MongoDb;
 using VehicleTracking.Infrastructure.Settings;
 
 namespace VehicleTracking.Infrastructure.Data
