@@ -5,13 +5,15 @@ VisualStudioVersion = 17.11.35327.3
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{EC2B6489-92A6-41C3-A4A5-27864961F42E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VehicleTracking.Domain", "src\VehicleTracking.Domain\VehicleTracking.Domain.csproj", "{94C8FFA3-5AA5-4D07-B41D-70052A03AC99}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VehicleTracking.Domain", "src\VehicleTracking.Domain\VehicleTracking.Domain.csproj", "{94C8FFA3-5AA5-4D07-B41D-70052A03AC99}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VehicleTracking.Infrastructure", "src\VehicleTracking.Infrastructure\VehicleTracking.Infrastructure.csproj", "{F180112F-58B7-4CC2-91E6-95CADE1EC821}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VehicleTracking.Infrastructure", "src\VehicleTracking.Infrastructure\VehicleTracking.Infrastructure.csproj", "{F180112F-58B7-4CC2-91E6-95CADE1EC821}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VehicleTracking.Application", "src\VehicleTracking.Application\VehicleTracking.Application.csproj", "{10AD22CB-9B95-44A3-8ED2-4A4EC5A2AD15}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VehicleTracking.Application", "src\VehicleTracking.Application\VehicleTracking.Application.csproj", "{10AD22CB-9B95-44A3-8ED2-4A4EC5A2AD15}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VehicleTracking.API", "src\VehicleTracking.API\VehicleTracking.API.csproj", "{831BA3B7-49B4-42A8-8C00-B6CC67AE34E9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VehicleTracking.API", "src\VehicleTracking.API\VehicleTracking.API.csproj", "{831BA3B7-49B4-42A8-8C00-B6CC67AE34E9}"
+EndProject
+Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "vehicletracking.web", "src\VehicleTracking.Web\vehicletracking.web.esproj", "{7695AC82-2E59-40C8-B501-9C5836C55B78}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -35,6 +37,12 @@ Global
 		{831BA3B7-49B4-42A8-8C00-B6CC67AE34E9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{831BA3B7-49B4-42A8-8C00-B6CC67AE34E9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{831BA3B7-49B4-42A8-8C00-B6CC67AE34E9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7695AC82-2E59-40C8-B501-9C5836C55B78}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7695AC82-2E59-40C8-B501-9C5836C55B78}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7695AC82-2E59-40C8-B501-9C5836C55B78}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{7695AC82-2E59-40C8-B501-9C5836C55B78}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7695AC82-2E59-40C8-B501-9C5836C55B78}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7695AC82-2E59-40C8-B501-9C5836C55B78}.Release|Any CPU.Deploy.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -44,6 +52,7 @@ Global
 		{F180112F-58B7-4CC2-91E6-95CADE1EC821} = {EC2B6489-92A6-41C3-A4A5-27864961F42E}
 		{10AD22CB-9B95-44A3-8ED2-4A4EC5A2AD15} = {EC2B6489-92A6-41C3-A4A5-27864961F42E}
 		{831BA3B7-49B4-42A8-8C00-B6CC67AE34E9} = {EC2B6489-92A6-41C3-A4A5-27864961F42E}
+		{7695AC82-2E59-40C8-B501-9C5836C55B78} = {EC2B6489-92A6-41C3-A4A5-27864961F42E}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4A22CBEE-4EEE-47B4-938B-3715B9006119}
