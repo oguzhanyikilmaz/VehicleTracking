@@ -7,12 +7,20 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
+    cors: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:5239',
+        target: 'https://localhost:54542/api',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
+  },
+  preview: {
+    port: 3000
+  },
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
   }
 })

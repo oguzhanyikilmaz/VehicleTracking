@@ -34,25 +34,33 @@ const getPermissionsFromToken = (token) => {
 const authService = {
   // Kullanıcı girişi
   login: async (username, password, rememberMe = false) => {
-    const response = await api.post('/auth/login', {
-      username,
-      password,
-      rememberMe
-    });
-    
-    if (response.data) {
-      const { accessToken, refreshToken, user } = response.data;
-      localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-      localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
+    try {
+      console.log('Login isteği gönderiliyor:', { username, rememberMe });
+      const response = await api.post('/auth/login', {
+        username,
+        password,
+        rememberMe
+      });
       
-      return {
-        user,
-        permissions: getPermissionsFromToken(accessToken)
-      };
+      console.log('Login yanıtı:', response.data);
+      
+      if (response.data) {
+        const { accessToken, refreshToken, user } = response.data;
+        localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+        localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+        localStorage.setItem(USER_KEY, JSON.stringify(user));
+        
+        return {
+          user,
+          permissions: getPermissionsFromToken(accessToken)
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Login hatası:', error);
+      throw error;
     }
-    
-    return null;
   },
   
   // Kullanıcı çıkışı
@@ -72,8 +80,46 @@ const authService = {
   
   // Kullanıcı kaydı
   register: async (registerData) => {
-    const response = await api.post('/auth/register', registerData);
-    return response.data;
+    try {
+      console.log('Kayıt isteği gönderiliyor:', registerData);
+      
+      // Endpoint'i kontrol et ve düzelt
+      const endpoint = '/auth/register';
+      console.log(`Kayıt endpoint: ${endpoint}`);
+      
+      const response = await api.post(endpoint, {
+        ...registerData,
+        // Eksik olabilecek alanları varsayılan değerler ile ekle
+        tenantId: registerData.tenantId || null,
+        isActive: true,
+        role: registerData.role || 'User'
+      });
+      
+      console.log('Kayıt yanıtı:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Kayıt hatası:', error);
+      
+      // Hata mesajını geliştir
+      if (error.response) {
+        console.log('Hata detayları:', error.response.data);
+        
+        // Özel hata mesajı kontrolü
+        if (error.response.data && error.response.data.message) {
+          error.userMessage = error.response.data.message;
+        } else if (error.response.status === 400) {
+          error.userMessage = 'Kayıt bilgilerinizde hatalar var. Lütfen tüm alanları kontrol edin.';
+        } else if (error.response.status === 409) {
+          error.userMessage = 'Bu kullanıcı adı veya e-posta adresi zaten kullanılıyor.';
+        } else {
+          error.userMessage = 'Kayıt sırasında bir hata oluştu. Lütfen daha sonra tekrar deneyin.';
+        }
+      } else {
+        error.userMessage = 'Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.';
+      }
+      
+      throw error;
+    }
   },
   
   // Mevcut kullanıcıyı al
