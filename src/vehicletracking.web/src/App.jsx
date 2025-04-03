@@ -1,4 +1,10 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React from 'react';
+import { 
+  BrowserRouter as Router, 
+  Routes, 
+  Route, 
+  Navigate 
+} from 'react-router-dom';
 import { CssBaseline, ThemeProvider } from '@mui/material';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -48,7 +54,7 @@ function App() {
         pauseOnHover
       />
       
-      <BrowserRouter>
+      <Router>
         <AuthProvider>
           <Routes>
             {/* Giriş yapmamış kullanıcılar için sayfalar */}
@@ -78,7 +84,7 @@ function App() {
             <Route path="*" element={<Navigate to="/not-found" replace />} />
           </Routes>
         </AuthProvider>
-      </BrowserRouter>
+      </Router>
     </ThemeProvider>
   );
 }

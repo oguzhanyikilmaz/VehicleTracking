@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { toast } from 'react-toastify';
 
-// API'nin temel URL'ini tanımlayın
-const API_URL = import.meta.env.VITE_API_URL || 'https://localhost:7239/api';
+// API'nin temel URL'ini tanımlayın 
+// Production ortamında env değişkeniyle gelecek, development ortamında proxy kullanacak
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_URL,

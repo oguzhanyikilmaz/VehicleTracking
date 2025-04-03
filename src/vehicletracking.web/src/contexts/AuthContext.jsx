@@ -26,6 +26,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        setLoading(true);
         if (authService.isAuthenticated()) {
           const currentUser = authService.getCurrentUser();
           if (currentUser) {
@@ -39,19 +40,38 @@ export const AuthProvider = ({ children }) => {
                 setPermissions(perms);
               } catch (error) {
                 console.error('İzinler alınırken hata oluştu:', error);
+                // Token geçersizse temizle
+                handleTokenError();
               }
+            } else {
+              // Token yoksa temizle
+              handleTokenError();
             }
+          } else {
+            // Kullanıcı bilgisi yoksa oturumu temizle
+            handleTokenError();
           }
         }
       } catch (error) {
         console.error('Kimlik doğrulama kontrolü sırasında hata:', error);
+        handleTokenError();
       } finally {
         setLoading(false);
       }
     };
 
     checkAuth();
-  }, []);
+  }, [navigate]);
+
+  // Token hata durumunda çağrılacak fonksiyon
+  const handleTokenError = () => {
+    // Oturum bilgilerini temizle
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    setUser(null);
+    setPermissions([]);
+  };
 
   // Giriş fonksiyonu
   const login = async (username, password, rememberMe = false) => {

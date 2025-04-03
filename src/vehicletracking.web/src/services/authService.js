@@ -1,5 +1,5 @@
 import api from './api';
-import { jwtDecode } from 'jwt-decode';
+import jwtDecode from 'jwt-decode';
 
 const USER_KEY = 'user';
 const ACCESS_TOKEN_KEY = 'accessToken';
