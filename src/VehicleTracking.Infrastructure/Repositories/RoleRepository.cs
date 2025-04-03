@@ -5,6 +5,7 @@ using MongoDB.Driver;
 using VehicleTracking.Domain.Entities;
 using VehicleTracking.Domain.Repositories;
 using VehicleTracking.Infrastructure.Data;
+using VehicleTracking.Infrastructure.Data.MongoDb;
 
 namespace VehicleTracking.Infrastructure.Repositories
 {

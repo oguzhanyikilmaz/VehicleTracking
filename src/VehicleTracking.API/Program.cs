@@ -44,7 +44,7 @@ builder.Services.AddSignalR(options =>
 // MongoDB
 builder.Services.Configure<MongoDbSettings>(
     builder.Configuration.GetSection("MongoDbSettings"));
-builder.Services.AddSingleton<MongoDbContext>();
+builder.Services.AddSingleton<VehicleTracking.Infrastructure.Data.MongoDb.MongoDbContext>();
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(MappingProfile));
