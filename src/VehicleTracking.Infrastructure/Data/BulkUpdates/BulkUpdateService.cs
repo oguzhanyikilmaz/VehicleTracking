@@ -73,7 +73,14 @@ namespace VehicleTracking.Infrastructure.Data.BulkUpdates
                                 VehicleId = update.VehicleId,
                                 Location = update.Location,
                                 Speed = update.Speed,
-                                Timestamp = update.Timestamp
+                                Timestamp = update.Timestamp,
+                                // Ek özellikleri ekle - eğer BulkLocationUpdate'de mevcutsa
+                                LocationDescription = update.LocationDescription,
+                                IpAddress = update.IpAddress,
+                                Heading = update.Heading,
+                                Distance = update.Distance,
+                                Temperature = update.Temperature,
+                                AlarmType = update.AlarmType
                             });
                         }
                     }

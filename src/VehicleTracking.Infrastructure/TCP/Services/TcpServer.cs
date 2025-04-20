@@ -289,7 +289,13 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                                     Location = new GeoJsonPoint<GeoJson2DGeographicCoordinates>(
                                         new GeoJson2DGeographicCoordinates(update.Longitude, update.Latitude)),
                                     Speed = update.Speed,
-                                    Timestamp = DateTime.UtcNow
+                                    Timestamp = DateTime.UtcNow,
+                                    LocationDescription = update.LocationDescription,
+                                    IpAddress = update.IpAddress,
+                                    Heading = update.Heading,
+                                    Distance = update.Distance,
+                                    Temperature = update.Temperature,
+                                    AlarmType = update.AlarmType
                                 });
                                 processedVehicleIds.Add(vehicleId);
                             }
@@ -326,7 +332,13 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                                         Location = new GeoJsonPoint<GeoJson2DGeographicCoordinates>(
                                             new GeoJson2DGeographicCoordinates(update.Longitude, update.Latitude)),
                                         Speed = update.Speed,
-                                        Timestamp = DateTime.UtcNow
+                                        Timestamp = DateTime.UtcNow,
+                                        LocationDescription = update.LocationDescription,
+                                        IpAddress = update.IpAddress,
+                                        Heading = update.Heading,
+                                        Distance = update.Distance,
+                                        Temperature = update.Temperature,
+                                        AlarmType = update.AlarmType
                                     });
                                     processedVehicleIds.Add(vehicleId);
                                 }
@@ -463,8 +475,18 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                             {
                                 try
                                 {
+                                    // Cihazdan gelen tüm verileri gateway'e gönder
                                     bool success = await _veraMobilGatewayService.SendLocationDataToGatewayAsync(
-                                        vehicleId, location, locationData.Speed, DateTime.UtcNow);
+                                        vehicleId, 
+                                        location, 
+                                        locationData.Speed, 
+                                        DateTime.UtcNow,
+                                        locationData.LocationDescription,
+                                        locationData.IpAddress,
+                                        locationData.Heading,
+                                        locationData.Distance,
+                                        locationData.Temperature,
+                                        locationData.AlarmType);
 
                                     if (success)
                                     {

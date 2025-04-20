@@ -27,5 +27,35 @@ namespace VehicleTracking.Infrastructure.Services
         /// Zaman damgası
         /// </summary>
         public DateTime Timestamp { get; set; }
+
+        /// <summary>
+        /// Konum açıklaması - İsteğe bağlı
+        /// </summary>
+        public string LocationDescription { get; set; }
+
+        /// <summary>
+        /// IP adresi - İsteğe bağlı
+        /// </summary>
+        public string IpAddress { get; set; }
+
+        /// <summary>
+        /// Yön bilgisi (derece cinsinden, 0-360) - İsteğe bağlı
+        /// </summary>
+        public double? Heading { get; set; }
+
+        /// <summary>
+        /// Mesafe bilgisi (metre cinsinden) - İsteğe bağlı
+        /// </summary>
+        public double? Distance { get; set; }
+
+        /// <summary>
+        /// Sıcaklık bilgisi (Celsius) - İsteğe bağlı
+        /// </summary>
+        public double? Temperature { get; set; }
+
+        /// <summary>
+        /// Alarm türü (varsa) - İsteğe bağlı
+        /// </summary>
+        public string AlarmType { get; set; }
     }
 } 

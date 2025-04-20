@@ -47,7 +47,13 @@ namespace VehicleTracking.Infrastructure.Services
             string vehicleId, 
             GeoJsonPoint<GeoJson2DGeographicCoordinates> location, 
             double speed, 
-            DateTime timestamp)
+            DateTime timestamp,
+            string locationDescription = null,
+            string ipAddress = null,
+            double? heading = null,
+            double? distance = null, 
+            double? temperature = null,
+            string alarmType = null)
         {
             try
             {
@@ -61,7 +67,17 @@ namespace VehicleTracking.Infrastructure.Services
                 }
 
                 // Query parametrelerini oluştur
-                var queryParams = CreateQueryParameters(vehicle, location, speed, timestamp);
+                var queryParams = CreateQueryParameters(
+                    vehicle, 
+                    location, 
+                    speed, 
+                    timestamp,
+                    locationDescription,
+                    ipAddress,
+                    heading,
+                    distance,
+                    temperature,
+                    alarmType);
 
                 // URL oluştur
                 string queryString = queryParams.ToString();
@@ -90,7 +106,13 @@ namespace VehicleTracking.Infrastructure.Services
                     locationData.VehicleId,
                     locationData.Location,
                     locationData.Speed,
-                    locationData.Timestamp);
+                    locationData.Timestamp,
+                    locationData.LocationDescription,
+                    locationData.IpAddress,
+                    locationData.Heading,
+                    locationData.Distance,
+                    locationData.Temperature,
+                    locationData.AlarmType);
             }
         }
 
@@ -101,7 +123,13 @@ namespace VehicleTracking.Infrastructure.Services
             Vehicle vehicle, 
             GeoJsonPoint<GeoJson2DGeographicCoordinates> location, 
             double speed, 
-            DateTime timestamp)
+            DateTime timestamp,
+            string locationDescription = null,
+            string ipAddress = null,
+            double? heading = null,
+            double? distance = null,
+            double? temperature = null,
+            string alarmType = null)
         {
             // Cihaz ID'sini al, eğer yok ise aracın ID'sini kullan
             string deviceId = !string.IsNullOrEmpty(vehicle.DeviceId) 
@@ -119,18 +147,20 @@ namespace VehicleTracking.Infrastructure.Services
             query["Y"] = location.Coordinates.Latitude.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
             query["TARIH"] = formattedDate;
             query["HIZ"] = ((int)speed).ToString();
-            query["KONUM"] = _settings.DefaultLocationDescription;
-            query["IPADRESS"] = _settings.DefaultIpAddress;
-            query["YON"] = "344"; // Yön bilgisi - varsayılan değer
-            query["MESAFE"] = "3545046000"; // Mesafe bilgisi - varsayılan değer
-            query["ALARM"] = string.Empty;
+            
+            // Opsiyonel parametreler, eğer cihazdan gelmemişse varsayılan değerleri kullan
+            query["KONUM"] = locationDescription ?? _settings.DefaultLocationDescription;
+            query["IPADRESS"] = ipAddress ?? _settings.DefaultIpAddress;
+            query["YON"] = heading.HasValue ? ((int)heading.Value).ToString() : "344";
+            query["MESAFE"] = distance.HasValue ? ((long)distance.Value).ToString() : "3545046000";
+            query["ALARM"] = !string.IsNullOrEmpty(alarmType) ? alarmType : string.Empty;
             query["SITUATIONS"] = "LOCATION";
-            query["ISI"] = "999"; // Isı bilgisi - varsayılan değer
+            query["ISI"] = temperature.HasValue ? ((int)temperature.Value).ToString() : "999";
             query["TRANSNO"] = "1";
             query["STATUS"] = "1";
             query["RAPORKODU"] = "VD";
             query["SURUCU"] = "1";
-            query["KONTAK"] = vehicle.EngineRunning ? "1" : "0"; // Kontak bilgisi
+            query["KONTAK"] = vehicle.EngineRunning ? "1" : "0"; // Kontak bilgisi aracın durumundan alınır
             query["KEY"] = _settings.ApiKey; // API anahtarı konfigürasyondan alınır
 
             return query;
