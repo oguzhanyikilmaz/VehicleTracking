@@ -17,6 +17,7 @@ using VehicleTracking.Infrastructure.Data.BulkUpdates;
 using VehicleTracking.Infrastructure.Monitoring;
 using VehicleTracking.Infrastructure.TCP.Interfaces;
 using VehicleTracking.Infrastructure.TCP.Models;
+using VehicleTracking.Infrastructure.Services;
 
 namespace VehicleTracking.Infrastructure.TCP.Services
 {
@@ -34,6 +35,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
         private readonly PerformanceMetrics _performanceMetrics;
         private readonly IVehicleService _vehicleService;
         private readonly ILocationBroadcastService _locationBroadcastService;
+        private readonly IVeraMobilGatewayService _veraMobilGatewayService;
         private Task _serverTask;
         private readonly int _port;
         private readonly Dictionary<string, string> _deviceIdToVehicleIdMap;
@@ -54,6 +56,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
             ILocationBroadcastService locationBroadcastService,
             ILogger<BatchProcessor<TcpLocationData>> batchProcessorLogger,
             ILogger<TcpConnectionPool> connectionPoolLogger,
+            IVeraMobilGatewayService veraMobilGatewayService = null,
             int port = 5000)
         {
             _logger = logger;
@@ -64,6 +67,7 @@ namespace VehicleTracking.Infrastructure.TCP.Services
             _performanceMetrics = performanceMetrics;
             _vehicleService = vehicleService;
             _locationBroadcastService = locationBroadcastService;
+            _veraMobilGatewayService = veraMobilGatewayService;
             _port = port;
             _listener = new TcpListener(IPAddress.Any, port);
             _cancellationTokenSource = new CancellationTokenSource();
@@ -447,6 +451,36 @@ namespace VehicleTracking.Infrastructure.TCP.Services
                             
                         _logger.LogDebug("Updated location for vehicle {VehicleId} from device {DeviceId}",
                             vehicleId, locationData.DeviceId);
+
+                        // Veramobil Gateway'e gönder
+                        if (_veraMobilGatewayService != null)
+                        {
+                            var location = new GeoJsonPoint<GeoJson2DGeographicCoordinates>(
+                                new GeoJson2DGeographicCoordinates(locationData.Longitude, locationData.Latitude));
+
+                            // Bu işlemi asenkron olarak arka planda çalıştır
+                            _ = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    bool success = await _veraMobilGatewayService.SendLocationDataToGatewayAsync(
+                                        vehicleId, location, locationData.Speed, DateTime.UtcNow);
+
+                                    if (success)
+                                    {
+                                        _logger.LogInformation("Successfully sent location data to VeraMobil Gateway for vehicle {VehicleId}", vehicleId);
+                                    }
+                                    else
+                                    {
+                                        _logger.LogWarning("Failed to send location data to VeraMobil Gateway for vehicle {VehicleId}", vehicleId);
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, "Error sending location data to VeraMobil Gateway for vehicle {VehicleId}", vehicleId);
+                                }
+                            });
+                        }
                     }
                     else
                     {

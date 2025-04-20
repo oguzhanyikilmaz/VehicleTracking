@@ -25,6 +25,14 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// HttpClient Factory ile HTTP istemcilerini yapılandır
+builder.Services.AddHttpClient("VeraMobilGateway", client =>
+{
+    client.BaseAddress = new Uri("https://t10.veramobil.com.tr/");
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+    // Diğer yapılandırmalar buraya eklenebilir
+});
+
 // CORS yapılandırması
 builder.Services.AddCors(options =>
 {
@@ -57,6 +65,10 @@ builder.Services.AddSignalR(options =>
 builder.Services.Configure<MongoDbSettings>(
     builder.Configuration.GetSection("MongoDbSettings"));
 builder.Services.AddSingleton<VehicleTracking.Infrastructure.Data.MongoDb.MongoDbContext>();
+
+// Veramobil Gateway Settings
+builder.Services.Configure<VeraMobilSettings>(
+    builder.Configuration.GetSection("VeraMobilSettings"));
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(MappingProfile));
@@ -153,6 +165,9 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
+
+// Veramobil Gateway Service
+builder.Services.AddScoped<IVeraMobilGatewayService, VeraMobilGatewayService>();
 
 // Broadcast Service
 builder.Services.AddScoped<ILocationBroadcastService, LocationBroadcastService>();
@@ -266,6 +281,7 @@ public class TcpServerFactory
         var locationBroadcastService = scope.ServiceProvider.GetRequiredService<ILocationBroadcastService>();
         var batchProcessorLogger = _serviceProvider.GetRequiredService<ILogger<BatchProcessor<TcpLocationData>>>();
         var connectionPoolLogger = _serviceProvider.GetRequiredService<ILogger<TcpConnectionPool>>();
+        var veraMobilGatewayService = scope.ServiceProvider.GetRequiredService<IVeraMobilGatewayService>();
 
         var port = _configuration.GetSection("TcpServer").GetValue<int>("Port", 5000);
         
@@ -280,6 +296,7 @@ public class TcpServerFactory
             locationBroadcastService,
             batchProcessorLogger,
             connectionPoolLogger,
+            veraMobilGatewayService,
             port);
     }
 }

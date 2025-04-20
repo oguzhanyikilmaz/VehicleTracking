@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using VehicleTracking.Domain.Entities;
 using VehicleTracking.Infrastructure.Common;
 using VehicleTracking.Infrastructure.Data.MongoDb;
+using VehicleTracking.Infrastructure.Services;
 
 namespace VehicleTracking.Infrastructure.Data.BulkUpdates
 {
@@ -16,15 +17,18 @@ namespace VehicleTracking.Infrastructure.Data.BulkUpdates
         private readonly MongoDbContext _mongoContext;
         private readonly ILogger<BulkUpdateService> _logger;
         private readonly RetryPolicy _retryPolicy;
+        private readonly IVeraMobilGatewayService _veraMobilGatewayService;
 
         public BulkUpdateService(
             MongoDbContext mongoContext,
             ILogger<BulkUpdateService> logger,
-            RetryPolicy retryPolicy)
+            RetryPolicy retryPolicy,
+            IVeraMobilGatewayService veraMobilGatewayService = null) // Opsiyonel parametre
         {
             _mongoContext = mongoContext;
             _logger = logger;
             _retryPolicy = retryPolicy;
+            _veraMobilGatewayService = veraMobilGatewayService;
         }
 
         public async Task<int> BulkUpdateLocationsAsync(IEnumerable<BulkLocationUpdate> updates)
@@ -39,6 +43,7 @@ namespace VehicleTracking.Infrastructure.Data.BulkUpdates
                 {
                     var bulkOps = new List<WriteModel<Vehicle>>();
                     var historyInserts = new List<LocationHistory>();
+                    var veraMobilUpdates = new List<VehicleLocationData>();
 
                     foreach (var update in updates)
                     {
@@ -59,6 +64,18 @@ namespace VehicleTracking.Infrastructure.Data.BulkUpdates
                             Speed = update.Speed,
                             Timestamp = update.Timestamp
                         });
+
+                        // VeraMobil Gateway'e gönderilecek verileri hazırla
+                        if (_veraMobilGatewayService != null)
+                        {
+                            veraMobilUpdates.Add(new VehicleLocationData
+                            {
+                                VehicleId = update.VehicleId,
+                                Location = update.Location,
+                                Speed = update.Speed,
+                                Timestamp = update.Timestamp
+                            });
+                        }
                     }
 
                     // Execute bulk vehicle updates
@@ -75,6 +92,24 @@ namespace VehicleTracking.Infrastructure.Data.BulkUpdates
                     {
                         await _mongoContext.LocationHistory.InsertManyAsync(historyInserts);
                         _logger.LogInformation("Inserted {Count} location history records", historyInserts.Count);
+                    }
+
+                    // Verileri VeraMobil Gateway'e gönder
+                    if (_veraMobilGatewayService != null && veraMobilUpdates.Any())
+                    {
+                        // Bu işlem asenkron olarak arka planda gerçekleşsin
+                        _ = Task.Run(async () => 
+                        {
+                            try
+                            {
+                                await _veraMobilGatewayService.SendBulkLocationDataToGatewayAsync(veraMobilUpdates);
+                                _logger.LogInformation("Sent {Count} location updates to VeraMobil Gateway", veraMobilUpdates.Count);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Error sending location updates to VeraMobil Gateway");
+                            }
+                        });
                     }
                 }, new Context { ["OperationKey"] = "BulkUpdateLocations" });
 
